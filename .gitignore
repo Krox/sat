@@ -1,0 +1,6 @@
+*~
+*.timing
+obj/*
+bin/*
+*.layout
+*.cbp
