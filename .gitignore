@@ -2,5 +2,6 @@
 *.timing
 obj/*
 bin/*
+old/*
 *.layout
 *.cbp
