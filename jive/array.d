@@ -1,7 +1,7 @@
 module jive.array;
 
 private import std.range : isInputRange, ElementType, hasLength;
-private import std.algorithm : moveAll, move;
+private import std.algorithm : moveAll, move, swap;
 
 // TODO: maybe implement toString and something similar to idup
 // TODO: figure out how to allow const-parameters for pushBack and alike (for value-type V)
@@ -39,9 +39,9 @@ struct Array(V)
 	/** post-blit that does a full copy */
 	this(this)
 	{
-		static import std.stdio	;// TODO: remove this
+		/*static import std.stdio;
 		if(length != 0)
-		std.stdio.writefln("called copy-constructor on Array!%s of length %s", V.stringof, length);
+		std.stdio.writefln("called copy-constructor on Array!%s of length %s", V.stringof, length);*/
 		buf = buf.ptr[0..count].dup;
 	}
 
@@ -205,6 +205,22 @@ struct Array(V)
 		this.resize(a);
 
 		return r;
+	}
+
+	/** sort and remove duplicates */
+	void makeSet()
+	{
+		if(empty)
+			return;
+
+		this[].sort;
+
+		size_t j = 1;
+		for(size_t i = 1; i < length; ++i)
+			if(this[i] != this[j-1])
+				swap(this[i],this[j++]);
+
+		this.resize(j);
 	}
 
 

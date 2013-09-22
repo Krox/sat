@@ -61,6 +61,7 @@ final class Solver
 
 	bool[] solve()
 	{
+		writefln("start solver: v=%s c=%s", db.varCount, db.clauseCount);
 		Array!int decStack;
 		decStack.reserve(db.varCount);	// wont grow that large if we did anything right
 

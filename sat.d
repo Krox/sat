@@ -3,19 +3,17 @@ module sat;
 import std.stdio;
 import std.conv;
 import jive.array;
-private import std.algorithm : move;
+private import std.algorithm : move, min, max;
 import solver, clause;
 import std.parallelism;
-
 
 class Sat
 {
 	const string name;
 	Array!(Array!int) clauses;
+	Array!(Array!int) clausesOriginal;	// unaltered clauses for final check
 	Array!bool assign;
 	int varCount;
-	Array!(Array!int) occs;
-	Array!bool blocked;
 
 	void test()
 	{
@@ -28,7 +26,7 @@ class Sat
 				throw new Exception("invalid assignment");
 		}
 
-		outer: foreach(ref c; clauses)
+		outer: foreach(ref c; clausesOriginal)
 		{
 			foreach(x; c)
 				if(assign[x])
@@ -69,9 +67,7 @@ class Sat
 		}
 
 		clauses.reserve(clauseCount);
-		blocked.reserve(clauseCount);
 		assign.resize(2*varCount);
-		occs.resize(2*varCount);
 
 		for(int i = 0; i < clauseCount; ++i)
 		{
@@ -89,28 +85,135 @@ class Sat
 			}
 
 			clauses.pushBack(move(c));
-			blocked.pushBack(false);
+		}
+
+		clausesOriginal = clauses;
+	}
+
+	// remove duplicates and tautological clauses and do unit propagation
+	void cleanup()
+	{
+		foreach(ref c, ref bool remClause; &clauses.prune)
+		{
+			c.makeSet();
+
+			for(size_t i = 1; i < c.length; ++i)
+				if(c[i] == (c[i-1]^1))
+				{
+					remClause = true;
+					break;
+				}
+		}
+
+		while(true)
+		{
+			bool change = false;
+
+			outer: foreach(ref c, ref bool remClause; &clauses.prune)
+			{
+				foreach(x, ref bool remLiteral; &c.prune)
+				{
+					if(assign[x])
+					{
+						remClause = true;
+						change = true;
+						continue outer;
+					}
+
+					if(assign[x^1])
+						remLiteral = true;
+				}
+
+				if(c.length == 0)
+					throw new Exception("answer is UNSAT (FIXME/TODO)");
+
+				if(c.length == 1)
+				{
+					assign[c[0]] = true;
+					remClause = true;
+					change = true;
+					continue outer;
+				}
+			}
+
+			if(!change)
+				break;
+		}
+
+		clauses.makeSet();
+	}
+
+	// set pure literals
+	void pureLiteral()
+	{
+		Array!(Array!int) occs;
+		occs.resize(2*varCount);
+
+		start:
+		foreach(int i, ref c; clauses)
+			foreach(x; c)
+				occs[x].pushBack(i);
+
+		bool change = false;
+
+		for(int x = 0; x < varCount*2; x += 2)
+			if(!assign[x] && !assign[x^1])
+			{
+				if(occs[x].empty)
+				{
+					change = true;
+					assign[x^1] = true;
+					foreach(i; occs[x^1])
+						clauses[i].resize(0);
+				}
+				else if(occs[x^1].empty)
+				{
+					change = true;
+					assign[x] = true;
+					foreach(i; occs[x])
+						clauses[i].resize(0);
+				}
+			}
+
+		if(change)	// if done something, prune clauses and redo
+		{
+			foreach(ref c, ref bool rem; &clauses.prune)
+				rem = c.empty;
+			for(int x = 0; x < varCount*2; ++x)
+				occs[x].resize(0);
+			goto start;
+		}
+	}
+
+	void dump()
+	{
+		foreach(ref c; clauses)
+		{
+			foreach(x; c)
+				writef("%s ", x&1?-((x>>1)+1):((x>>1)+1));
+			writefln("0");
 		}
 	}
 
 	void solve()
 	{
-		writefln("solving %s: v=%s c=%s", name[25..$], varCount, clauses.length);
+		writefln("solving %s: v=%s c=%s", name[max(0,cast(int)$-50)..$], varCount, clauses.length);
+
+		cleanup();	// actually not worth it on my testcases, but not by much
+		//pureLiteral();	// not worth it either, but more seriously
 
 		auto renum = new int[2*varCount];
 		renum[] = -1;
-		{
-			int i = 0;
-			for(int x = 0; x < 2*varCount; x+=2)
-				if(!assign[x] && !assign[x^1])
-				{
-					renum[x] = i;
-					renum[x^1] = i^1;
-					i += 2;
-				}
-		}
+		int j = 0;
+		for(int x = 0; x < 2*varCount; x+=2)
+			if(!assign[x] && !assign[x^1])
+			{
+				renum[x] = j;
+				renum[x^1] = j^1;
+				j += 2;
+			}
 
-		auto db = new ClauseDB(varCount);
+		auto db = new ClauseDB(j/2);
 		foreach(ci, ref c; clauses)
 		{
 			int buf[500];

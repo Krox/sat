@@ -6,6 +6,9 @@ private import std.algorithm : move, swap;
 final class ClauseDB
 {
 	const int varCount;	// note: making this unsigned will/has/might lead to bugs
+	int clauseCount;
+
+	Array!(Array!int) clausesBin;
 
 	static struct pair { int a,b; }
 	Array!(Array!pair) clausesTri;
@@ -19,6 +22,7 @@ final class ClauseDB
 	this(int varCount)
 	{
 		this.varCount = varCount;
+		this.clausesBin.resize(2*varCount);
 		this.clausesTri.resize(2*varCount);
 		this.occsLong.resize(2*varCount);
 		stack.reserve(varCount);
@@ -27,6 +31,8 @@ final class ClauseDB
 
 	void addClause(int[] c)	// NOTE: makes copy of the clause
 	{
+		++clauseCount;
+
 		switch(c.length)
 		{
 			case 0:
@@ -34,7 +40,9 @@ final class ClauseDB
 				throw new Exception("invalid clause length in solver");
 
 			case 2:
-				throw new Exception("TODO / FIXME");
+				clausesBin[c[0]].pushBack(c[1]);
+				clausesBin[c[1]].pushBack(c[0]);
+				break;
 
 			case 3:
 				clausesTri[c[0]].pushBack(pair(c[1],c[2]));
@@ -67,6 +75,21 @@ final class ClauseDB
 		while(pos != stack.length)
 		{
 			auto x = stack[pos++];
+
+			foreach(int y; clausesBin[x^1])
+			{
+				if(assign[y])
+					continue;
+
+				if(assign[y^1])
+				{
+					while(stack.length != startpos)
+						assign[stack.popBack] = false;
+					return 0;
+				}
+
+				set(y);
+			}
 
 			foreach(pair c; clausesTri[x^1])
 			{
