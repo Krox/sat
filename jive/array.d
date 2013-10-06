@@ -176,6 +176,14 @@ struct Array(V)
 		return buf.ptr[0..count][$-1];	// will use correct bounds-check
 	}
 
+	/** remove i'th element (O(n) runtime) */
+	void remove(size_t i)
+	{
+		for(size_t j = i; j < count-1; ++j)
+			buf[j] = move(buf[j+1]);
+		--count;
+	}
+
 	int prune(int delegate(ref V val, ref bool remove) dg)
 	{
 		size_t a=0;
@@ -282,6 +290,7 @@ struct Array(V)
 			buf[count..newsize] = V.init;	// TODO: use moveAll
 		}
 		count = newsize;
+		// TODO: destruct truncated elements
 	}
 
 
@@ -297,7 +306,7 @@ struct Array(V)
 		return h;
 	}
 
-	bool opEquals(const ref Array other) const nothrow
+	bool opEquals(const ref Array other) const // nothrow (nothrow doesnt work on 32 bit for some reason)
 	{
 		return this[] == other[];
 	}
@@ -317,87 +326,4 @@ struct Array(V)
 	private V[] buf = null;		// .length = capacity
 	private size_t count = 0;	// used size
 	private enum startSize = 4;	// tuneable. No investigation done.
-}
-
-
-/**
- *  pretty much the thing, STL called vector. never shrinks. value semantic.
- */
-struct FlatQueue(V)
-{
-	//////////////////////////////////////////////////////////////////////
-	/// constructors
-	//////////////////////////////////////////////////////////////////////
-
-	/** constructor for given length */
-	this(size_t size)
-	{
-		buf = new V[size];
-	}
-
-	/** post-blit that does a full copy */
-	this(this)
-	{
-		static import std.stdio	;// TODO: remove this
-		if(buf.length != 0)
-			std.stdio.writefln("called copy-constructor on FlatQueue!%s of length %s", V.stringof, length);
-		buf = buf.dup;
-	}
-
-
-	//////////////////////////////////////////////////////////////////////
-	/// metrics
-	//////////////////////////////////////////////////////////////////////
-
-	/** check for emptiness */
-	bool empty() const nothrow @property @safe
-	{
-		return a==b;
-	}
-
-	/** number of elements */
-	size_t length() const nothrow @property @safe
-	{
-		return b-a;
-	}
-
-
-	//////////////////////////////////////////////////////////////////////
-	/// indexing, add, remove
-	//////////////////////////////////////////////////////////////////////
-
-	/** first element */
-	ref V front() @property
-	{
-		return buf.ptr[a..b][0];	// will use correct bounds-check
-	}
-
-	/** add some new element to the back */
-	void push(T:V)(T val)
-	{
-		assert(b != buf.length);
-		buf[b++] = move(val);
-	}
-
-
-	/** returns removed element */
-	V pop()
-	{
-		auto x = move(buf[a++]);
-		if(a==b)
-			clear();
-		return move(x);
-	}
-
-	void clear()
-	{
-		a = b = 0;
-	}
-
-	//////////////////////////////////////////////////////////////////////
-	/// internals
-	//////////////////////////////////////////////////////////////////////
-
-	private V[] buf = null;
-	private size_t a = 0, b = 0;	// indices for in/out
 }
