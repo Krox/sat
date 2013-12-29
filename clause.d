@@ -65,8 +65,18 @@ final class ClauseDB
 		stack.pushBack(x);
 	}
 
-	int propagate(int _x)	// returns number of set variables. 0 on conflict.
+	/** sets one literal, and performs unit propagation
+	    returns slice of newly set variable
+	    returns empty non-null if literal was already set
+	    returns null on conflict (state unchanged in this case) **/
+	int[] propagate(int _x)
 	{
+		if(assign[_x])
+			return stack[$..$];	// note this is not null
+
+		if(assign[_x^1])
+			return null;
+
 		size_t pos = stack.length;
 		size_t startpos = pos;
 
@@ -85,7 +95,7 @@ final class ClauseDB
 				{
 					while(stack.length != startpos)
 						assign[stack.popBack] = false;
-					return 0;
+					return null;
 				}
 
 				set(y);
@@ -101,7 +111,7 @@ final class ClauseDB
 					{
 						while(stack.length != startpos)
 							assign[stack.popBack] = false;
-						return 0;
+						return null;
 					}
 					else
 						set(c.b);
@@ -135,14 +145,14 @@ final class ClauseDB
 				{
 					while(stack.length != startpos)
 						assign[stack.popBack] = false;
-					return 0;
+					return null;
 				}
 
 				set(unit);
 			}
 		}
 
-		return cast(int)(pos - startpos);
+		return stack[startpos..$];
 	}
 
 	void unroll(int x)

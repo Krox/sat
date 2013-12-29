@@ -10,24 +10,25 @@ final class Solver
 
 	this(ClauseDB db)
 	{
-		this.db = db; // note: clauses inside db are not set yet. So dont try to do anything here
+		this.db = db;
 	}
 
 	bool forceFailedLiteral(ref int suggestedLiteral) // false, if a conflict was discovered (resulting assign is NOT clean)
 	{
-		start:
 		int bestScore = -1;
 		suggestedLiteral = -1;
-		bool success = false;
+		int stop = 0;
+		int x = 0;
 
-		for(int x = 0; x < 2*db.varCount; x+=2)	// TODO: use some non-arbitrary order here (in particular, exploit dominating literals)
+		do // TODO: use some non-arbitrary order here (in particular, exploit dominating literals)
+		{
 			if(!db.assign[x] && !db.assign[x^1])
 			{
-				if(int posScore = db.propagate(x))
+				if(auto posScore = db.propagate(x).length)
 				{
 					db.unroll(x);
 
-					if(int negScore = db.propagate(x^1))	// both work -> unroll (and score it for decision)
+					if(auto negScore = db.propagate(x^1).length)	// both work -> unroll (and score it for decision)
 					{
 						db.unroll(x^1);
 
@@ -41,20 +42,28 @@ final class Solver
 					else	// positive worked, negative not
 					{
 						db.propagate(x);
-						success = true;
+
+						bestScore = -1;
+						suggestedLiteral = -1;
+						stop = x;
 					}
 				}
 				else
 				{
 					if(db.propagate(x^1))	// negative worked, positive not
-						success = true;
+					{
+						bestScore = -1;
+						suggestedLiteral = -1;
+						stop = x;
+					}
 					else	// both dont work -> conflict
 						return false;
 				}
 			}
 
-		if(success)
-			goto start;
+			x = (x+2)%(db.varCount*2);
+		}
+		while(x != stop);
 
 		return true;
 	}
@@ -74,7 +83,7 @@ final class Solver
 					return null;
 				int y = decStack.popBack;
 				db.unroll(y);
-				if(0 == db.propagate(y^1))
+				if(db.propagate(y^1).length == 0)
 					throw new Exception("nah, cant happen");
 				continue;
 			}
@@ -86,7 +95,7 @@ final class Solver
 			}
 
 			decStack.pushBack(x);
-			if(0 == db.propagate(x))
+			if(db.propagate(x).length == 0)
 				throw new Exception("cannot happen");	// this would have been detected in failed literal probing
 		}
 	}
