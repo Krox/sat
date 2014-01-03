@@ -35,7 +35,18 @@ class Sat
 			throw new Exception("final check failed");
 		}
 
-		writefln("final check ok");
+		writefln("c final check ok");
+	}
+
+	void writeAssignment()
+	{
+		writef("v");
+		for(int i = 0; i < varCount; ++i)
+			if(assign[2*i])
+				writef(" %s", i+1);
+			else
+				writef(" -%s", i+1);
+		writefln(" 0");
 	}
 
 	this(string filename)
@@ -90,8 +101,9 @@ class Sat
 		clausesOriginal = clauses;
 	}
 
-	// remove duplicates and tautological clauses and do unit propagation
-	void cleanup()
+	/** remove duplicates and tautological clauses and do unit propagation.
+	returns false on unsat */
+	bool cleanup()
 	{
 		foreach(ref c, ref bool remClause; &clauses.prune)
 		{
@@ -125,7 +137,11 @@ class Sat
 				}
 
 				if(c.length == 0)
-					throw new Exception("answer is UNSAT (FIXME/TODO)");
+				{
+					writefln("c unsat found during cleanup");
+					return false;
+				}
+
 
 				if(c.length == 1)
 				{
@@ -141,6 +157,8 @@ class Sat
 		}
 
 		clauses.makeSet();
+
+		return true;
 	}
 
 	// set pure literals
@@ -197,9 +215,14 @@ class Sat
 
 	void solve()
 	{
-		writefln("solving %s: v=%s c=%s", name[max(0,cast(int)$-50)..$], varCount, clauses.length);
+		writefln("c solving %s: v=%s c=%s", name[max(0,cast(int)$-50)..$], varCount, clauses.length);
 
-		cleanup();	// actually not worth it on my testcases, but not by much
+		if(!cleanup())	// actually not worth it on my testcases, but not by much
+		{
+			writefln("s UNSATISFIABLE");
+			return;
+		}
+
 		//pureLiteral();	// not worth it either, but more seriously
 
 		auto renum = new int[2*varCount];
@@ -233,8 +256,12 @@ class Sat
 			}
 
 			test();
+
+			writefln("s SATISFIABLE");
+			writeAssignment();
 		}
 		else
-			throw new Exception("answer is UNSAT (might be correct, but needs cheking)");
+			writefln("s UNSATISFIABLE");
+
 	}
 }

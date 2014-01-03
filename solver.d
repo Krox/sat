@@ -68,9 +68,10 @@ final class Solver
 		return true;
 	}
 
+	/** return null on UNSAT */
 	bool[] solve()
 	{
-		writefln("start solver: v=%s c=%s", db.varCount, db.clauseCount);
+		writefln("c start solver: v=%s c=%s", db.varCount, db.clauseCount);
 		Array!int decStack;
 		decStack.reserve(db.varCount);	// wont grow that large if we did anything right
 
@@ -89,10 +90,7 @@ final class Solver
 			}
 
 			if(x == -1)	// no free literal -> solution found
-			{
-				writefln("solution found");
 				return db.assign[];
-			}
 
 			decStack.pushBack(x);
 			if(db.propagate(x).length == 0)
