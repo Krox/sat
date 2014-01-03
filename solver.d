@@ -24,11 +24,11 @@ final class Solver
 		{
 			if(!db.assign[x] && !db.assign[x^1])
 			{
-				if(auto posScore = db.propagate(x).length)
+				if(auto posScore = cast(int)db.propagate(x).length)
 				{
 					db.unroll(x);
 
-					if(auto negScore = db.propagate(x^1).length)	// both work -> unroll (and score it for decision)
+					if(auto negScore = cast(int)db.propagate(x^1).length)	// both work -> unroll (and score it for decision)
 					{
 						db.unroll(x^1);
 
