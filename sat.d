@@ -10,33 +10,10 @@ import std.parallelism;
 class Sat
 {
 	const string name;
-	Array!(Array!int) clauses;
-	Array!(Array!int) clausesOriginal;	// unaltered clauses for final check
+	Array!(Array!int) clauses;	// length=0 means clause was removed
 	Array!bool assign;
+	bool dirty;		// true if there is an assignment that is not fully propagated yet
 	int varCount;
-
-	void test()
-	{
-		for(int x = 0; x < 2*varCount; x+=2)
-		{
-			if(!assign[x] && !assign[x^1])
-				throw new Exception("incomplete assignment on variable "~to!string(x));
-
-			if(assign[x] && assign[x^1])
-				throw new Exception("invalid assignment");
-		}
-
-		outer: foreach(ref c; clausesOriginal)
-		{
-			foreach(x; c)
-				if(assign[x])
-					continue outer;
-
-			throw new Exception("final check failed");
-		}
-
-		writefln("c final check ok");
-	}
 
 	void writeAssignment()
 	{
@@ -47,6 +24,51 @@ class Sat
 			else
 				writef(" -%s", i+1);
 		writefln(" 0");
+	}
+
+	void setVariable(int x)
+	{
+		if(assign[x^1])
+			throw new Unsat;
+		if(assign[x])
+			return;
+		dirty = true;
+		assign[x] = true;
+	}
+
+	/** returns false if the clause is trivial, satisfied or unit */
+	bool normalizeClause(ref Array!int c)
+	{
+		foreach(x, ref bool rem; &c.prune)
+		{
+			if(assign[x])
+				return false;
+			if(assign[x^1])
+				rem = true;
+		}
+
+		c.makeSet();
+
+		if(c.length == 0)
+			throw new Unsat;
+
+		if(c.length == 1)
+		{
+			setVariable(c[0]);
+			return false;
+		}
+
+		for(size_t i = 1; i < c.length; ++i)
+			if(c[i] == (c[i-1]^1))
+				return false;
+
+		return true;
+	}
+
+	void addClause(Array!int c)
+	{
+		if(normalizeClause(c))
+			clauses.pushBack(move(c));
 	}
 
 	this(string filename)
@@ -95,70 +117,23 @@ class Sat
 				c.pushBack(x);
 			}
 
-			clauses.pushBack(move(c));
+			addClause(move(c));
 		}
-
-		clausesOriginal = clauses;
 	}
 
-	/** remove duplicates and tautological clauses and do unit propagation.
-	returns false on unsat */
-	bool cleanup()
+	/** remove tautological clauses and do unit propagation */
+	void cleanup()
 	{
-		foreach(ref c, ref bool remClause; &clauses.prune)
-		{
-			c.makeSet();
+		if(!dirty)
+			return;
+		dirty = false;
 
-			for(size_t i = 1; i < c.length; ++i)
-				if(c[i] == (c[i-1]^1))
-				{
-					remClause = true;
-					break;
-				}
-		}
+		foreach(ref c; clauses)
+			if(c.length)
+				if(!normalizeClause(c))
+					c.resize(0);
 
-		while(true)
-		{
-			bool change = false;
-
-			outer: foreach(ref c, ref bool remClause; &clauses.prune)
-			{
-				foreach(x, ref bool remLiteral; &c.prune)
-				{
-					if(assign[x])
-					{
-						remClause = true;
-						change = true;
-						continue outer;
-					}
-
-					if(assign[x^1])
-						remLiteral = true;
-				}
-
-				if(c.length == 0)
-				{
-					writefln("c unsat found during cleanup");
-					return false;
-				}
-
-
-				if(c.length == 1)
-				{
-					assign[c[0]] = true;
-					remClause = true;
-					change = true;
-					continue outer;
-				}
-			}
-
-			if(!change)
-				break;
-		}
-
-		clauses.makeSet();
-
-		return true;
+		cleanup();
 	}
 
 	// set pure literals
@@ -217,11 +192,7 @@ class Sat
 	{
 		writefln("c solving %s: v=%s c=%s", name[max(0,cast(int)$-50)..$], varCount, clauses.length);
 
-		if(!cleanup())	// actually not worth it on my testcases, but not by much
-		{
-			writefln("s UNSATISFIABLE");
-			return;
-		}
+		cleanup();	// actually not worth it on my testcases, but not by much, so I keep it
 
 		//pureLiteral();	// not worth it either, but more seriously
 
@@ -238,6 +209,7 @@ class Sat
 
 		auto db = new ClauseDB(j/2);
 		foreach(ci, ref c; clauses)
+			if(c.length)
 		{
 			int buf[500];
 			foreach(size_t i, x; c)
@@ -255,13 +227,18 @@ class Sat
 				assign[x^1] = sol[renum[x]^1];
 			}
 
-			test();
-
 			writefln("s SATISFIABLE");
 			writeAssignment();
 		}
 		else
 			writefln("s UNSATISFIABLE");
+	}
+}
 
+class Unsat : Exception
+{
+	this()
+	{
+		super("answer is unsat");
 	}
 }
