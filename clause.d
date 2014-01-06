@@ -21,6 +21,8 @@ final class ClauseDB
 
 	this(int varCount)
 	{
+		assert(varCount > 0);
+
 		this.varCount = varCount;
 		this.clausesBin.resize(2*varCount);
 		this.clausesTri.resize(2*varCount);

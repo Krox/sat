@@ -11,8 +11,8 @@ class Sat
 {
 	const string name;
 	Array!(Array!int) clauses;	// length=0 means clause was removed
+	Array!(Array!int) occs;
 	Array!bool assign;
-	bool dirty;		// true if there is an assignment that is not fully propagated yet
 	int varCount;
 
 	void writeAssignment()
@@ -32,8 +32,20 @@ class Sat
 			throw new Unsat;
 		if(assign[x])
 			return;
-		dirty = true;
 		assign[x] = true;
+
+		auto occsPos = move(occs[x]);
+		auto occsNeg = move(occs[x^1]);
+
+		foreach(i; occsPos)
+			removeClause(i);
+
+		foreach(i; occsNeg)
+		{
+			clauses[i].removeValue(x^1);
+			if(clauses[i].length == 1)
+				setVariable(clauses[i][0]);
+		}
 	}
 
 	/** returns false if the clause is trivial, satisfied or unit */
@@ -67,15 +79,28 @@ class Sat
 
 	void addClause(Array!int c)
 	{
-		if(normalizeClause(c))
-			clauses.pushBack(move(c));
+		if(!normalizeClause(c))
+			return;
+		foreach(x; c)
+			occs[x].pushBack(cast(int)clauses.length);
+		clauses.pushBack(move(c));
 	}
 
-	this(string filename)
+	void removeClause(int i)
 	{
-		//writefln("loading %s", filename);
+		auto c = move(clauses[i]);	// this sets clauses[i].length = 0, i.e. marks it as removed
+		foreach(x; c)
+			occs[x].removeValue(i);
+	}
+
+	private this(string filename)
+	{
 		name = filename;
-		auto f = File(filename, "r");
+	}
+
+	void readFile()
+	{
+		auto f = File(name, "r");
 		int clauseCount;
 
 		loop: while(true)
@@ -99,8 +124,11 @@ class Sat
 			}
 		}
 
+		writefln("c reading file %s: v=%s c=%s", name[max(0,cast(int)$-50)..$], varCount, clauseCount);
+
 		clauses.reserve(clauseCount);
 		assign.resize(2*varCount);
+		occs.resize(2*varCount);
 
 		for(int i = 0; i < clauseCount; ++i)
 		{
@@ -121,63 +149,6 @@ class Sat
 		}
 	}
 
-	/** remove tautological clauses and do unit propagation */
-	void cleanup()
-	{
-		if(!dirty)
-			return;
-		dirty = false;
-
-		foreach(ref c; clauses)
-			if(c.length)
-				if(!normalizeClause(c))
-					c.resize(0);
-
-		cleanup();
-	}
-
-	// set pure literals
-	void pureLiteral()
-	{
-		Array!(Array!int) occs;
-		occs.resize(2*varCount);
-
-		start:
-		foreach(int i, ref c; clauses)
-			foreach(x; c)
-				occs[x].pushBack(i);
-
-		bool change = false;
-
-		for(int x = 0; x < varCount*2; x += 2)
-			if(!assign[x] && !assign[x^1])
-			{
-				if(occs[x].empty)
-				{
-					change = true;
-					assign[x^1] = true;
-					foreach(i; occs[x^1])
-						clauses[i].resize(0);
-				}
-				else if(occs[x^1].empty)
-				{
-					change = true;
-					assign[x] = true;
-					foreach(i; occs[x])
-						clauses[i].resize(0);
-				}
-			}
-
-		if(change)	// if done something, prune clauses and redo
-		{
-			foreach(ref c, ref bool rem; &clauses.prune)
-				rem = c.empty;
-			for(int x = 0; x < varCount*2; ++x)
-				occs[x].resize(0);
-			goto start;
-		}
-	}
-
 	void dump()
 	{
 		foreach(ref c; clauses)
@@ -190,12 +161,6 @@ class Sat
 
 	void solve()
 	{
-		writefln("c solving %s: v=%s c=%s", name[max(0,cast(int)$-50)..$], varCount, clauses.length);
-
-		cleanup();	// actually not worth it on my testcases, but not by much, so I keep it
-
-		//pureLiteral();	// not worth it either, but more seriously
-
 		auto renum = new int[2*varCount];
 		renum[] = -1;
 		int j = 0;
@@ -206,6 +171,12 @@ class Sat
 				renum[x^1] = j^1;
 				j += 2;
 			}
+
+		if(j == 0)
+		{
+			writefln("c all variables set in preprocessing");
+			return;
+		}
 
 		auto db = new ClauseDB(j/2);
 		foreach(ci, ref c; clauses)
@@ -218,20 +189,31 @@ class Sat
 		}
 
 		auto sol = (new Solver(db)).solve();
-		if(sol !is null)
-		{
-			for(int x = 0; x < 2*varCount; x+=2)
-			if(renum[x] != -1)
-			{
-				assign[x] = sol[renum[x]];
-				assign[x^1] = sol[renum[x]^1];
-			}
+		if(sol is null)
+			throw new Unsat;
 
-			writefln("s SATISFIABLE");
-			writeAssignment();
+		for(int x = 0; x < 2*varCount; x+=2)
+		if(renum[x] != -1)
+		{
+			assign[x] = sol[renum[x]];
+			assign[x^1] = sol[renum[x]^1];
 		}
-		else
+	}
+
+	static void solve(string filename)
+	{
+		auto sat = new Sat(filename);
+		try
+		{
+			sat.readFile();
+			sat.solve();
+			writefln("s SATISFIABLE");
+			sat.writeAssignment();
+		}
+		catch(Unsat e)
+		{
 			writefln("s UNSATISFIABLE");
+		}
 	}
 }
 

@@ -176,61 +176,18 @@ struct Array(V)
 		return buf.ptr[0..count][$-1];	// will use correct bounds-check
 	}
 
-	/** remove i'th element (O(n) runtime) */
-	void remove(size_t i)
+	//////////////////////////////////////////////////////////////////////
+	/// find
+	//////////////////////////////////////////////////////////////////////
+
+	/** find element with given value. returns length if not found */
+	size_t find(const /*ref*/ V v) const
 	{
-		for(size_t j = i; j < count-1; ++j)
-			buf[j] = move(buf[j+1]);
-		--count;
+		foreach(i, const ref x; this)
+			if(v == x)
+				return i;
+		return this.length;
 	}
-
-	int prune(int delegate(ref V val, ref bool remove) dg)
-	{
-		size_t a=0;
-		size_t b;
-		int r;
-		for(b = 0; b < length; ++b)
-		{
-			bool remove = false;
-			if(0 != (r = dg(this[b], remove)))
-				break;
-
-			if(!remove)
-			{
-				if(b != a)
-					this[a] = move(this[b]);
-				++a;
-			}
-		}
-
-		for(; b < length; ++b)
-		{
-			if(b != a)
-				this[a] = move(this[b]);
-			++a;
-		}
-
-		this.resize(a);
-
-		return r;
-	}
-
-	/** sort and remove duplicates */
-	void makeSet()
-	{
-		if(empty)
-			return;
-
-		this[].sort;
-
-		size_t j = 1;
-		for(size_t i = 1; i < length; ++i)
-			if(this[i] != this[j-1])
-				swap(this[i],this[j++]);
-
-		this.resize(j);
-	}
-
 
 	//////////////////////////////////////////////////////////////////////
 	/// add, remove
@@ -281,18 +238,54 @@ struct Array(V)
 		return move(buf[--count]);
 	}
 
-	/** sets the size to some value. Either cuts of some values (but does not free memory), or fills new ones with V.init */
-	void resize(size_t newsize)
+	/** remove i'th element (O(n) runtime) */
+	void remove(size_t i)
 	{
-		if(newsize > capacity)
-		{
-			reserve(newsize);
-			buf[count..newsize] = V.init;	// TODO: use moveAll
-		}
-		count = newsize;
-		// TODO: destruct truncated elements
+		for(size_t j = i; j < count-1; ++j)
+			buf[j] = move(buf[j+1]);
+		--count;
 	}
 
+	/** remove (at most) one element with value v */
+	bool removeValue(const /*ref*/ V v)
+	{
+		size_t i = find(v);
+		if(i == length)
+			return false;
+		remove(i);
+		return true;
+	}
+
+	int prune(int delegate(ref V val, ref bool remove) dg)
+	{
+		size_t a=0;
+		size_t b;
+		int r;
+		for(b = 0; b < length; ++b)
+		{
+			bool remove = false;
+			if(0 != (r = dg(this[b], remove)))
+				break;
+
+			if(!remove)
+			{
+				if(b != a)
+					this[a] = move(this[b]);
+				++a;
+			}
+		}
+
+		for(; b < length; ++b)
+		{
+			if(b != a)
+				this[a] = move(this[b]);
+			++a;
+		}
+
+		this.resize(a);
+
+		return r;
+	}
 
 	//////////////////////////////////////////////////////////////////////
 	/// comparision
@@ -318,6 +311,37 @@ struct Array(V)
 		return typeid(typeof(a)).compare(&a, &b);
 	}
 
+	//////////////////////////////////////////////////////////////////////
+	/// misc
+	//////////////////////////////////////////////////////////////////////
+
+	/** sort and remove duplicates */
+	void makeSet()
+	{
+		if(empty)
+			return;
+
+		this[].sort;
+
+		size_t j = 1;
+		for(size_t i = 1; i < length; ++i)
+			if(this[i] != this[j-1])
+				swap(this[i],this[j++]);
+
+		this.resize(j);
+	}
+
+	/** sets the size to some value. Either cuts of some values (but does not free memory), or fills new ones with V.init */
+	void resize(size_t newsize)
+	{
+		if(newsize > capacity)
+		{
+			reserve(newsize);
+			buf[count..newsize] = V.init;	// TODO: use moveAll
+		}
+		count = newsize;
+		// TODO: destruct truncated elements
+	}
 
 	//////////////////////////////////////////////////////////////////////
 	/// internals

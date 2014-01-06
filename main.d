@@ -11,6 +11,5 @@ void main(string[] args)
 		return;
 	}
 
-	auto sat = new Sat(args[1]);
-	sat.solve();
+	Sat.solve(args[1]);
 }
