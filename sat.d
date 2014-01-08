@@ -3,6 +3,7 @@ module sat;
 import std.stdio;
 import std.conv;
 import jive.array;
+import jive.flatset;
 private import std.algorithm : move, min, max;
 import solver, clause;
 import std.parallelism;
@@ -10,8 +11,8 @@ import std.parallelism;
 class Sat
 {
 	const string name;
-	Array!(Array!int) clauses;	// length=0 means clause was removed
-	Array!(Array!int) occs;
+	Array!(FlatSet!int) clauses;	// length=0 means clause was removed
+	Array!(Array!int) occs;	// can contain removed clauses
 	Array!bool assign;
 	int varCount;
 
@@ -42,14 +43,14 @@ class Sat
 
 		foreach(i; occsNeg)
 		{
-			clauses[i].removeValue(x^1);
+			clauses[i].remove(x^1);
 			if(clauses[i].length == 1)
 				setVariable(clauses[i][0]);
 		}
 	}
 
 	/** returns false if the clause is trivial, satisfied or unit */
-	bool normalizeClause(ref Array!int c)
+	bool normalizeClause(ref FlatSet!int c)
 	{
 		foreach(x, ref bool rem; &c.prune)
 		{
@@ -58,8 +59,6 @@ class Sat
 			if(assign[x^1])
 				rem = true;
 		}
-
-		c.makeSet();
 
 		if(c.length == 0)
 			throw new Unsat;
@@ -77,7 +76,7 @@ class Sat
 		return true;
 	}
 
-	void addClause(Array!int c)
+	void addClause(FlatSet!int c)
 	{
 		if(!normalizeClause(c))
 			return;
@@ -89,8 +88,6 @@ class Sat
 	void removeClause(int i)
 	{
 		auto c = move(clauses[i]);	// this sets clauses[i].length = 0, i.e. marks it as removed
-		foreach(x; c)
-			occs[x].removeValue(i);
 	}
 
 	private this(string filename)
@@ -130,10 +127,10 @@ class Sat
 		assign.resize(2*varCount);
 		occs.resize(2*varCount);
 
+		Array!int c;
+
 		for(int i = 0; i < clauseCount; ++i)
 		{
-			Array!int c;
-
 			while(true)
 			{
 				int x;
@@ -145,7 +142,8 @@ class Sat
 				c.pushBack(x);
 			}
 
-			addClause(move(c));
+			addClause(FlatSet!int(c[]));
+			c.resize(0);
 		}
 	}
 
