@@ -78,7 +78,7 @@ struct FlatSet(V)
 		size_t i = find(v);
 		if(i == length)
 			return false;
-		remove(i);
+		vals.remove(i);
 		return true;
 	}
 }
