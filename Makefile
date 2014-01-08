@@ -1,5 +1,5 @@
 
-modules = main jive/array sat solver clause
+modules = main jive/array jive/flatset sat solver clause
 objs = $(patsubst %, obj/%.o, $(modules))
 source = $(patsubst %, %.d, $(modules))
 

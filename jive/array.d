@@ -232,6 +232,15 @@ struct Array(V)
 		return this;
 	}
 
+	/** insert new element at given location. shifts all elements behind */
+	void insert(size_t pos, V data)
+	{
+		pushBack(V.init);
+		for(size_t i = length; i != pos; --i)
+			buf[i] = move(buf[i-1]);
+		buf[pos] = move(data);
+	}
+
 	/** returns removed element */
 	V popBack()
 	{
