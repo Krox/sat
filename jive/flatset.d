@@ -53,7 +53,7 @@ struct FlatSet(V)
 	size_t find(const /*ref*/ V v) const
 	{
 		auto i = findPos(v);
-		if(this[i] == v)
+		if(i < length && this[i] == v)
 			return i;
 		else
 			return length;
