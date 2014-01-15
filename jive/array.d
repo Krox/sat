@@ -4,8 +4,7 @@ private import std.range : isInputRange, ElementType, hasLength;
 private import std.algorithm : moveAll, move, swap;
 
 // TODO: maybe implement toString and something similar to idup
-// TODO: figure out how to allow const-parameters for pushBack and alike (for value-type V)
-// TODO: add a couple of @safe and nothrow attributes
+// TODO: add a couple of @safe, pure and nothrow attributes if applicable (NOTE: that might require such attributes on the postblit of V)
 
 /**
  *  pretty much the thing, STL called vector. never shrinks. value semantic.
@@ -91,57 +90,57 @@ struct Array(V)
 	//////////////////////////////////////////////////////////////////////
 
 	/** indexing */
-	ref V opIndex(size_t index) @safe
+	ref V opIndex(size_t index)
 	{
 		return buf.ptr[0..count][index];	// will use correct bounds-check
 	}
 
 	/** ditto */
-	ref const(V) opIndex(size_t index) const @safe
+	ref const(V) opIndex(size_t index) const
 	{
 		return buf.ptr[0..count][index];	// will use correct bounds-check
 	}
 
 	/** default range */
-	V[] opSlice() nothrow @safe
+	V[] opSlice() nothrow
 	{
 		return buf.ptr[0..count];	// no bounds-check
 	}
 
 	/** ditto */
-	const(V)[] opSlice() const nothrow @safe
+	const(V)[] opSlice() const nothrow
 	{
 		return buf.ptr[0..count];	// no bounds-check
 	}
 
 	/** range */
-	V[] opSlice(size_t start, size_t end) @safe
+	V[] opSlice(size_t start, size_t end)
 	{
 		return buf.ptr[0..count][start..end];	// correct bounds-check
 	}
 
 	/** ditto */
-	const(V)[] opSlice(size_t start, size_t end) const @safe
+	const(V)[] opSlice(size_t start, size_t end) const
 	{
 		return buf.ptr[0..count][start..end];	// correct bounds-check
 	}
 
-	void opSliceAssign(V value) nothrow @safe
+	void opSliceAssign(V value)
 	{
 		buf.ptr[0..count] = value;	// no bounds-check
 	}
 
-	void opSliceAssign(ref V value) nothrow @safe
+	void opSliceAssign(ref V value)
 	{
 		buf.ptr[0..count] = value;	// no bounds-check
 	}
 
-	void opSliceAssign(V value, size_t a, size_t b) @safe
+	void opSliceAssign(V value, size_t a, size_t b)
 	{
 		buf[a..b] = value;	// will use correct bounds-check
 	}
 
-	void opSliceAssign(ref V value, size_t a, size_t b) @safe
+	void opSliceAssign(ref V value, size_t a, size_t b)
 	{
 		buf[a..b] = value;	// will use correct bounds-check
 	}
@@ -236,7 +235,7 @@ struct Array(V)
 	void insert(size_t pos, V data)
 	{
 		pushBack(V.init);
-		for(size_t i = length; i != pos; --i)
+		for(size_t i = length-1; i != pos; --i)
 			buf[i] = move(buf[i-1]);
 		buf[pos] = move(data);
 	}
@@ -303,12 +302,12 @@ struct Array(V)
 	hash_t toHash() const nothrow @trusted @property
 	{
 		hash_t h = length*17;
-		foreach(ref x; buf[0..count])
+		foreach(ref x; buf.ptr[0..count])
 			h = 19*h+23*typeid(V).getHash(&x);
 		return h;
 	}
 
-	bool opEquals(const ref Array other) const // nothrow (nothrow doesnt work on 32 bit for some reason)
+	bool opEquals(const ref Array other) const
 	{
 		return this[] == other[];
 	}
@@ -323,22 +322,6 @@ struct Array(V)
 	//////////////////////////////////////////////////////////////////////
 	/// misc
 	//////////////////////////////////////////////////////////////////////
-
-	/** sort and remove duplicates */
-	void makeSet()
-	{
-		if(empty)
-			return;
-
-		this[].sort;
-
-		size_t j = 1;
-		for(size_t i = 1; i < length; ++i)
-			if(this[i] != this[j-1])
-				swap(this[i],this[j++]);
-
-		this.resize(j);
-	}
 
 	/** sets the size to some value. Either cuts of some values (but does not free memory), or fills new ones with V.init */
 	void resize(size_t newsize)

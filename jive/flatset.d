@@ -1,6 +1,7 @@
 module jive.flatset;
 
 import jive.array;
+private import std.algorithm : sort;
 
 /** set structure implemented as sorted array.
  *  NOTE: elements may not change (w.r.t. their relative order)
@@ -18,7 +19,19 @@ struct FlatSet(V)
 	this(V[] val)
 	{
 		vals = Array!V(val);
-		vals.makeSet();
+
+		if(empty)
+			return;
+
+		// NOTE: dont use "this[].sort", because of dmd bug (d.puremagic.com/issues/show_bug.cgi?id=11932)
+		sort(vals[]);
+
+		size_t j = 1;
+		for(size_t i = 1; i < length; ++i)
+			if(vals[i] != vals[j-1])
+				swap(vals[i], vals[j++]);
+
+		vals.resize(j);
 	}
 
 	//////////////////////////////////////////////////////////////////////
@@ -66,7 +79,7 @@ struct FlatSet(V)
 	bool add(V v)
 	{
 		auto p = findPos(v);
-		if(this[p] == v)
+		if(p < length && this[p] == v)
 			return false;
 		insert(p, v);
 		return true;
