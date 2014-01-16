@@ -1,18 +1,5 @@
 
-modules = main jive/array jive/queue jive/flatset sat solver clause
-objs = $(patsubst %, obj/%.o, $(modules))
-source = $(patsubst %, %.d, $(modules))
-
 all : bin/sat
-cleanall: clean
-
-obj/%.o : %.d
-	dmd -g -O -debug -c -of$@ $<
-	#dmd -O -g -release -c -of$@ $<
-
-bin/sat : $(objs)
-	g++ -o $@ $^ -lphobos2 -lpthread -lrt
-
-clean :
-	rm -fr obj/* bin/*
-
+.PHONY : bin/sat # 'sat' is the actual filename, but make doesn't know its dependencies
+bin/sat :
+	rdmd --build-only -O -g -debug -ofbin/sat main.d
