@@ -8,7 +8,7 @@ import jive.flatset;
 private import std.math : abs;
 private import std.algorithm : move, min, max;
 private import std.bitmanip : bitfields;
-import solver, clause;
+import solver, clause, twosat;
 import std.parallelism;
 
 struct Lit
@@ -67,6 +67,7 @@ class Sat
 	{
 		undef = 0,
 		set,
+		eq,
 	}
 
 	struct VarState
@@ -78,19 +79,32 @@ class Sat
 			));
 	}
 
+	Lit rootLiteral(Lit l)
+	{
+		while(var[l.var].state == eq)
+		{
+			l.sign = l.sign ^ var[l.var].sign;
+			l.var = var[l.var].eq;
+		}
+		return l;
+	}
+
 	void writeAssignment()
 	{
 		writef("v");
 		for(uint v = 0; v < varCount; ++v)
 		{
-			assert(var[v].state == set);
-			writef(" %s", Lit(v, var[v].sign).toDimacs);
+			Lit l =  rootLiteral(Lit(v,false));
+			assert(var[l.var].state == set, "tried to output incomplete assignment");
+			writef(" %s", Lit(v, var[l.var].sign ^ l.sign).toDimacs);
 		}
 		writefln(" 0");
 	}
 
 	void setLiteral(Lit l)
 	{
+		l = rootLiteral(l);
+
 		if(var[l.var].state == set)
 		{
 			if(var[l.var].sign == l.sign)
@@ -99,43 +113,92 @@ class Sat
 				throw new Unsat;
 		}
 
+		assert(var[l.var].state == undef);
 		var[l.var].state = set;
 		var[l.var].sign = l.sign;
 		prop.push(l.var);
 	}
 
-	void propagate()
+	void setEquivalence(Lit a, Lit b)
 	{
-		while(!prop.empty)
-		{
-			uint v = prop.pop();
-			assert(var[v].state == set);
-			bool s = var[v].sign;
+		a = rootLiteral(a);
+		b = rootLiteral(b);
+		bool sign = a.sign^b.sign;
+		uint v = a.var, w = b.var;
 
-			auto occsPos = move(occs[Lit(v,s)]);
-			auto occsNeg = move(occs[Lit(v,!s)]);
+		if(v == w)
+			if(sign)
+				throw new Unsat;
+			else
+				return;
 
-			foreach(i; occsPos)
-				removeClause(i);
+		if(var[v].state == set)
+			return setLiteral(Lit(w, var[v].sign^sign));
+		if(var[w].state == set)
+			return setLiteral(Lit(v, var[w].sign^sign));
 
-			foreach(i; occsNeg)
-			{
-				clauses[i].remove(Lit(v,!s));
-				if(clauses[i].length == 1)
-					setLiteral(clauses[i][0]);
-			}
-		}
+		assert(var[v].state == undef);
+		assert(var[w].state == undef);
+		var[w].state = eq;
+		var[w].eq = v;
+		var[w].sign = sign;
+		prop.push(w);
 	}
 
-	/** returns false if the clause is trivial, satisfied or unit */
-	bool normalizeClause(ref Clause c)
+	/** returns number of vars propagated */
+	uint propagate()
+	{
+		uint count = 0;
+		while(!prop.empty)
+		{
+			++count;
+			uint v = prop.pop();
+
+			if(var[v].state == set)
+			{
+				bool s = var[v].sign;
+				auto occsPos = move(occs[Lit(v,s)]);
+				auto occsNeg = move(occs[Lit(v,!s)]);
+
+				foreach(i; occsPos)
+					removeClause(i);
+
+				foreach(i; occsNeg)
+					if(clauses[i].length)
+					{
+						if(!clauses[i].remove(Lit(v,!s)))
+							assert(false, "corrupt occ-list found while propagating");
+
+						if(clauses[i].length == 1)
+							setLiteral(clauses[i][0]);
+					}
+			}
+			else if(var[v].state == eq)
+			{
+				Lit a = Lit(v,false);
+				Lit b = rootLiteral(a);
+				assert(a != b);
+
+				foreach(i; move(occs[a]))
+					replaceOcc(i, a, b);
+				foreach(i; move(occs[a.neg]))
+					replaceOcc(i, a.neg, b.neg);
+			}
+			else assert(false);
+		}
+
+		return count;
+	}
+
+	void addClause(Clause c)
 	{
 		foreach(l, ref bool rem; &c.prune)
 			if(var[l.var].state == set)
 				if(var[l.var].sign == l.sign)
-					return false;
+					return;
 				else
 					rem = true;
+			else assert(var[l.var].state == undef);
 
 		if(c.length == 0)
 			throw new Unsat;
@@ -143,20 +206,13 @@ class Sat
 		if(c.length == 1)
 		{
 			setLiteral(c[0]);
-			return false;
+			return;
 		}
 
 		for(size_t i = 1; i < c.length; ++i)
 			if(c[i] == c[i-1].neg)
-				return false;
+				return;
 
-		return true;
-	}
-
-	void addClause(Clause c)
-	{
-		if(!normalizeClause(c))
-			return;
 		foreach(x; c)
 			occs[x].pushBack(cast(int)clauses.length);
 		clauses.pushBack(move(c));
@@ -165,6 +221,15 @@ class Sat
 	void removeClause(int i)
 	{
 		auto c = move(clauses[i]);	// this sets clauses[i].length = 0, i.e. marks it as removed
+	}
+
+	void replaceOcc(int i, Lit a, Lit b)
+	{
+		if(clauses[i].remove(a) && clauses[i].add(b))
+			occs[b].pushBack(i);
+		if(clauses[i].length == 1)
+			setLiteral(clauses[i][0]);
+		// TODO: find tautological clause here
 	}
 
 	private this(string filename)
@@ -214,7 +279,7 @@ class Sat
 				if(f.readf(" %s", &x) != 1)
 					throw new Exception("read error");
 				if(x==0) break;
-				assert(-varCount<=x && x <= varCount);
+				assert(-varCount<=x && x <= varCount, "invalid dimacs file (variable out of bounds)");
 				c.pushBack(Lit.fromDimacs(x));
 			}
 
@@ -254,7 +319,10 @@ class Sat
 		{
 			int buf[500];
 			foreach(size_t i, x; c)
+			{
+				assert(renum[x.var] != -1, "problem still contains removed variables");
 				buf[i] = Lit(renum[x.var], x.sign);
+			}
 			db.addClause(buf[0..c.length]);
 		}
 
@@ -281,7 +349,9 @@ class Sat
 		try
 		{
 			sat.readFile();
-			sat.propagate();
+			writefln("c removed %s variables by unit propagation", sat.propagate());
+			solve2sat(sat);
+			writefln("c removed %s variables by solving 2-sat", sat.propagate());
 			sat.solve();
 			writefln("s SATISFIABLE");
 			sat.writeAssignment();
