@@ -3,11 +3,15 @@ module sat;
 import std.stdio;
 import std.conv;
 import jive.array;
+import jive.lazyarray;
 import jive.queue;
 import jive.flatset;
 private import std.math : abs;
 private import std.algorithm : move, min, max;
 private import std.bitmanip : bitfields;
+private import std.array : join;
+private import std.conv : to;
+private import std.range : map;
 import solver, clause, twosat;
 import std.parallelism;
 
@@ -52,10 +56,42 @@ struct Lit
 	}
 }
 
+struct Clause
+{
+	FlatSet!Lit lits;
+	alias lits this;
+
+	this(Lit[] lits)
+	{
+		this.lits = lits;
+	}
+
+	uint signs() const @property
+	{
+		assert(length <= 32);
+		uint r = 0;
+		foreach(i, l; this)
+			if(l.sign)
+				r |= 1U << i;
+		return r;
+	}
+
+	string toString() const @property
+	{
+		return join(map!"to!string(a.toDimacs)"(lits[]), " ");
+	}
+
+	bool tautological() const @property
+	{
+		for(size_t i = 1; i < length; ++i)
+			if(this[i].var == this[i-1].var)
+				return true;
+		return false;
+	}
+}
 
 class Sat
 {
-	alias FlatSet!Lit Clause;
 	const string name;
 	Array!Clause clauses;	// length=0 means clause was removed
 	Array!(Array!int) occs;	// can contain removed clauses
@@ -209,9 +245,8 @@ class Sat
 			return;
 		}
 
-		for(size_t i = 1; i < c.length; ++i)
-			if(c[i] == c[i-1].neg)
-				return;
+		if(c.tautological)
+			return;
 
 		foreach(x; c)
 			occs[x].pushBack(cast(int)clauses.length);
@@ -223,13 +258,32 @@ class Sat
 		auto c = move(clauses[i]);	// this sets clauses[i].length = 0, i.e. marks it as removed
 	}
 
+	/** find clause or any subclause. -1 if not found. signs is relative to signs of c */
+	int findClause(const ref Clause c, uint signs = 0)
+	{
+		static LazyArray!ubyte buf;
+		assert(c.length <= 256);
+
+		buf.resize(clauses.length);
+		buf.reset();
+
+		foreach(i, l; c)
+			foreach(j; occs[Lit(l.var, l.sign != ((signs&(1<<i))!=0))])
+				if(0 < clauses[j].length && clauses[j].length <= c.length)
+					if(++buf[j] == clauses[j].length)
+						return j;
+		return -1;
+	}
+
+
 	void replaceOcc(int i, Lit a, Lit b)
 	{
 		if(clauses[i].remove(a) && clauses[i].add(b))
 			occs[b].pushBack(i);
 		if(clauses[i].length == 1)
 			setLiteral(clauses[i][0]);
-		// TODO: find tautological clause here
+		if(clauses[i].tautological)
+			clauses[i].resize(0);
 	}
 
 	private this(string filename)
@@ -291,11 +345,8 @@ class Sat
 	void dump()
 	{
 		foreach(ref c; clauses)
-		{
-			foreach(x; c)
-				writef("%s ", x.toDimacs);
-			writefln("0");
-		}
+			if(c.length)
+				writefln("%s 0", c);
 	}
 
 	void solve()
