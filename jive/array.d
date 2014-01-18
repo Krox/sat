@@ -29,10 +29,14 @@ struct Array(V)
 		this[] = val;
 	}
 
-	this(V[] val)
+	this(Stuff)(Stuff data)
+		if(!is(Stuff:V) && isInputRange!Stuff && is(ElementType!Stuff:V))
 	{
-		this(val.length);
-		this[][] = val[];
+		static if(hasLength!Stuff)
+			reserve(count + data.length);
+
+		foreach(x; data)
+			pushBack(x);
 	}
 
 	/** post-blit that does a full copy */
@@ -323,16 +327,17 @@ struct Array(V)
 	/// misc
 	//////////////////////////////////////////////////////////////////////
 
-	/** sets the size to some value. Either cuts of some values (but does not free memory), or fills new ones with V.init */
-	void resize(size_t newsize)
+	/** sets the size to some value. Either cuts of some values (but does not free memory), or fills new ones with v */
+	void resize(size_t newsize, V v = V.init)
 	{
 		if(newsize > capacity)
 		{
 			reserve(newsize);
-			buf[count..newsize] = V.init;	// TODO: use moveAll
+			buf[count..newsize] = v;
 		}
+		else
+			buf[newsize..count] = V.init;	// destruct truncated elements
 		count = newsize;
-		// TODO: destruct truncated elements
 	}
 
 	//////////////////////////////////////////////////////////////////////

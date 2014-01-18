@@ -1,11 +1,13 @@
 module jive.flatset;
 
 import jive.array;
-private import std.algorithm : sort;
+private import std.algorithm : sort, setDifference, setIntersection, setSymmetricDifference, setUnion;
 
 /** set structure implemented as sorted array.
  *  NOTE: elements may not change (w.r.t. their relative order)
  *  TODO: use 'move' to avoid postblits for complex types V
+ *	TODO: implement the set operations inplace (at least some of them)
+ *	TODO: const versions of the set-operations (at least when V has no references)
  */
 struct FlatSet(V)
 {
@@ -16,9 +18,10 @@ struct FlatSet(V)
 	/// constructors
 	//////////////////////////////////////////////////////////////////////
 
-	this(V[] val)
+	this(Stuff)(Stuff data)
+		if(!is(Stuff:V) && isInputRange!Stuff && is(ElementType!Stuff:V))
 	{
-		vals = Array!V(val);
+		vals = Array!V(data);
 
 		if(empty)
 			return;
@@ -38,7 +41,25 @@ struct FlatSet(V)
 	/// set operations
 	//////////////////////////////////////////////////////////////////////
 
-	/* TODO: merge, disect, etc */
+	FlatSet difference(ref FlatSet other)
+	{
+		return FlatSet(setDifference(this[], other[]));
+	}
+
+	FlatSet intersection(ref FlatSet other)
+	{
+		return FlatSet(setIntersection(this[], other[]));
+	}
+
+	FlatSet symmetricDifference(ref FlatSet other)
+	{
+		return FlatSet(setSymmetricDifference(this[], other[]));
+	}
+
+	FlatSet amalgamation(ref FlatSet other)
+	{
+		return FlatSet(setUnion(this[], other[]));
+	}
 
 	//////////////////////////////////////////////////////////////////////
 	/// find
@@ -70,6 +91,11 @@ struct FlatSet(V)
 			return i;
 		else
 			return length;
+	}
+
+	bool opIn_r(const /*ref*/ V v) const
+	{
+		return find(v) != length;
 	}
 
 	//////////////////////////////////////////////////////////////////////
