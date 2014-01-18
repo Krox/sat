@@ -1,19 +1,17 @@
 module sat;
 
-import std.stdio;
-import std.conv;
 import jive.array;
 import jive.lazyarray;
 import jive.queue;
 import jive.flatset;
+private import std.stdio;
 private import std.math : abs;
 private import std.algorithm : move, min, max;
 private import std.bitmanip : bitfields;
 private import std.array : join;
 private import std.conv : to;
 private import std.range : map;
-import parser, solver, clause, twosat, xor;
-import std.parallelism;
+import clause, solver;
 
 struct Lit
 {
@@ -131,6 +129,28 @@ final class Sat
 			l.var = var[l.var].eq;
 		}
 		return l;
+	}
+
+	bool isSatisfied(Lit l)
+	{
+		l = rootLiteral(l);
+		return var[l.var].state == set && (var[l.var].sign == l.sign);
+	}
+
+	bool isSatisfied(const ref Clause c)
+	{
+		foreach(l; c)
+			if(isSatisfied(l))
+				return true;
+		return false;
+	}
+
+	bool isSatisfied(const ref Array!Clause cs)
+	{
+		foreach(ref c; cs)
+			if(!isSatisfied(c))
+				return false;
+		return true;
 	}
 
 	void writeAssignment()
@@ -343,39 +363,6 @@ final class Sat
 			else if(sol[Lit(renum[v], true)])
 				var[v].sign = true;
 			else assert(false);
-		}
-	}
-
-	static void solve(string filename)
-	{
-		try
-		{
-			int varCount;
-			Array!Clause clauses;
-
-			writefln("c reading file %s", filename);
-			readDimacs(filename, varCount, clauses);
-			writefln("c v=%s c=%s",varCount, clauses.length);
-
-			auto sat = new Sat(varCount, cast(int)clauses.length);
-			foreach(ref c; clauses)
-				sat.addClause(c);
-
-			writefln("c removed %s variables by unit propagation", sat.propagate());
-
-			solve2sat(sat);
-			writefln("c removed %s variables by solving 2-sat", sat.propagate());
-
-			solveXor(sat);
-			writefln("c removed %s variables by solving larger xors", sat.propagate());
-
-			sat.solve();
-			writefln("s SATISFIABLE");
-			sat.writeAssignment();
-		}
-		catch(Unsat e)
-		{
-			writefln("s UNSATISFIABLE");
 		}
 	}
 }

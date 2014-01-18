@@ -1,7 +1,8 @@
 module main;
 
 import std.stdio;
-import sat;
+import jive.array;
+import sat, parser, solver, xor, twosat;
 
 void main(string[] args)
 {
@@ -11,5 +12,36 @@ void main(string[] args)
 		return;
 	}
 
-	Sat.solve(args[1]);
+	try
+	{
+		int varCount;
+		Array!Clause clauses;
+
+		writefln("c reading file %s", args[1]);
+		readDimacs(args[1], varCount, clauses);
+		writefln("c v=%s c=%s",varCount, clauses.length);
+
+		auto sat = new Sat(varCount, cast(int)clauses.length);
+		foreach(ref c; clauses)
+			sat.addClause(c);
+
+		writefln("c removed %s variables by unit propagation", sat.propagate());
+
+		solve2sat(sat);
+		writefln("c removed %s variables by solving 2-sat", sat.propagate());
+
+		solveXor(sat);
+		writefln("c removed %s variables by solving larger xors", sat.propagate());
+
+		sat.solve();
+		writefln("s SATISFIABLE");
+		sat.writeAssignment();
+
+		if(!sat.isSatisfied(clauses))
+			throw new Exception("FINAL TEST FAIL");
+	}
+	catch(Unsat e)
+	{
+		writefln("s UNSATISFIABLE");
+	}
 }
