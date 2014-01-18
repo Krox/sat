@@ -12,7 +12,7 @@ private import std.bitmanip : bitfields;
 private import std.array : join;
 private import std.conv : to;
 private import std.range : map;
-import solver, clause, twosat, xor;
+import parser, solver, clause, twosat, xor;
 import std.parallelism;
 
 struct Lit
@@ -92,7 +92,6 @@ struct Clause
 
 final class Sat
 {
-	const string name;
 	Array!Clause clauses;	// length=0 means clause was removed
 	Array!(Array!int) occs;	// can contain removed clauses
 	Array!VarState var;
@@ -113,6 +112,15 @@ final class Sat
 			bool, "sign", 1,
 			uint, "eq", 29
 			));
+	}
+
+	/** NOTE: clauseCount is only an estimate */
+	this(int varCount, int clauseCount = 0)
+	{
+		this.varCount = varCount;
+		var.resize(varCount);
+		occs.resize(2*varCount);
+		clauses.reserve(clauseCount);
 	}
 
 	Lit rootLiteral(Lit l)
@@ -286,62 +294,6 @@ final class Sat
 			clauses[i].resize(0);
 	}
 
-	private this(string filename)
-	{
-		name = filename;
-	}
-
-	void readFile()
-	{
-		auto f = File(name, "r");
-		int clauseCount;
-
-		loop: while(true)
-		{
-			string foo;
-			if(f.readf("%s ", &foo) != 1)
-				throw new Exception("file read error");
-
-			switch(foo)
-			{
-				case "c":
-					f.readln();
-					break;
-
-				case "p":
-					if(f.readf(" cnf %s %s\n", &varCount, &clauseCount) != 2)
-						throw new Exception("file read error");
-					break loop;
-
-				default: throw new Exception("unexpected line in file starting with \""~foo~"\"");
-			}
-		}
-
-		writefln("c reading file %s: v=%s c=%s", name[max(0,cast(int)$-50)..$], varCount, clauseCount);
-
-		clauses.reserve(clauseCount);
-		var.resize(varCount);
-		occs.resize(2*varCount);
-
-		Array!Lit c;
-
-		for(int i = 0; i < clauseCount; ++i)
-		{
-			while(true)
-			{
-				int x;
-				if(f.readf(" %s", &x) != 1)
-					throw new Exception("read error");
-				if(x==0) break;
-				assert(-varCount<=x && x <= varCount, "invalid dimacs file (variable out of bounds)");
-				c.pushBack(Lit.fromDimacs(x));
-			}
-
-			addClause(Clause(c[]));
-			c.resize(0);
-		}
-	}
-
 	void dump()
 	{
 		foreach(ref c; clauses)
@@ -396,10 +348,19 @@ final class Sat
 
 	static void solve(string filename)
 	{
-		auto sat = new Sat(filename);
 		try
 		{
-			sat.readFile();
+			int varCount;
+			Array!Clause clauses;
+
+			writefln("c reading file %s", filename);
+			readDimacs(filename, varCount, clauses);
+			writefln("c v=%s c=%s",varCount, clauses.length);
+
+			auto sat = new Sat(varCount, cast(int)clauses.length);
+			foreach(ref c; clauses)
+				sat.addClause(c);
+
 			writefln("c removed %s variables by unit propagation", sat.propagate());
 
 			solve2sat(sat);
