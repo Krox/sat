@@ -12,7 +12,7 @@ private import std.bitmanip : bitfields;
 private import std.array : join;
 private import std.conv : to;
 private import std.range : map;
-import solver, clause, twosat;
+import solver, clause, twosat, xor;
 import std.parallelism;
 
 struct Lit
@@ -90,7 +90,7 @@ struct Clause
 	}
 }
 
-class Sat
+final class Sat
 {
 	const string name;
 	Array!Clause clauses;	// length=0 means clause was removed
@@ -401,8 +401,13 @@ class Sat
 		{
 			sat.readFile();
 			writefln("c removed %s variables by unit propagation", sat.propagate());
+
 			solve2sat(sat);
 			writefln("c removed %s variables by solving 2-sat", sat.propagate());
+
+			solveXor(sat);
+			writefln("c removed %s variables by solving larger xors", sat.propagate());
+
 			sat.solve();
 			writefln("s SATISFIABLE");
 			sat.writeAssignment();

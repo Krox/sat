@@ -1,8 +1,9 @@
 #!/bin/bash
 
 #list=`find ./sat-2002-beta/generated/gen-1/ -type f`
-list=`find ./sat-2002-beta/generated/gen-1/gen-1.[1-5] -type f`
-#list=`find ./sat-2002-beta/submitted -type f`
+#list=`find ./sat-2002-beta/generated/gen-1/gen-1.[1-5] -type f`
+list=`find ./sat-2002-beta/submitted -type f`
+#list=`find ./sat-2002-beta/submitted/pehoushek/ezfact/ -type f`
 
 solver="bin/sat"
 #solver="./cryptominisat --verbosity=0"
