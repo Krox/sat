@@ -1,4 +1,4 @@
-module clause;
+module sat.clause;
 
 import jive.array;
 private import std.algorithm : move, swap;

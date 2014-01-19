@@ -1,12 +1,12 @@
-module parser;
+module sat.parser;
 
-import sat;
 import jive.array;
 import std.file : readText;
 import std.string : stripLeft;
 import std.algorithm : find, max;
 import std.conv : parse;
 import std.math : abs;
+import sat.sat;
 
 /**
  * read a .cnf file in dimacs format.

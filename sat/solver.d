@@ -1,8 +1,8 @@
-module solver;
+module sat.solver;
 
 import std.stdio;
 import jive.array;
-import clause;
+import sat.clause;
 
 final class Solver
 {

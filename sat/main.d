@@ -1,8 +1,8 @@
-module main;
+module sat.main;
 
 import std.stdio;
 import jive.array;
-import sat, parser, solver, xor, twosat;
+import sat.sat, sat.parser, sat.solver, sat.xor, sat.twosat;
 
 void main(string[] args)
 {

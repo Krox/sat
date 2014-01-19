@@ -1,8 +1,8 @@
-module twosat;
+module sat.twosat;
 
 import std.algorithm : min;
 import jive.array;
-import sat;
+import sat.sat;
 
 void solve2sat(Sat sat)
 {

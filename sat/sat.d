@@ -1,4 +1,4 @@
-module sat;
+module sat.sat;
 
 import jive.array;
 import jive.lazyarray;
@@ -11,7 +11,7 @@ private import std.bitmanip : bitfields;
 private import std.array : join;
 private import std.conv : to;
 private import std.range : map;
-import clause, solver;
+import sat.clause, sat.solver;
 
 struct Lit
 {

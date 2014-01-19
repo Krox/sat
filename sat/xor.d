@@ -1,12 +1,12 @@
-module xor;
+module sat.xor;
 
-import sat;
 import jive.array;
 import jive.flatset;
 import jive.unionfind;
 private import core.bitop : popcnt;
 private import std.stdio;
 private import std.range;
+import sat.sat;
 
 void solveXor(Sat sat)
 {
