@@ -2,7 +2,7 @@ module sat.solver;
 
 import std.stdio;
 import jive.array;
-import sat.clause;
+import sat.sat, sat.clause;
 
 final class Solver
 {
@@ -13,24 +13,24 @@ final class Solver
 		this.db = db;
 	}
 
-	bool forceFailedLiteral(ref int suggestedLiteral) // false, if a conflict was discovered (resulting assign is NOT clean)
+	bool forceFailedLiteral(ref Lit suggestedLiteral) // false, if a conflict was discovered (resulting assign is NOT clean)
 	{
 		int bestScore = -1;
-		suggestedLiteral = -1;
-		int stop = 0;
-		int x = 0;
+		suggestedLiteral = Lit.nil;
+		Lit stop;
+		Lit x;
 
 		do // TODO: use some non-arbitrary order here (in particular, exploit dominating literals)
 		{
-			if(!db.assign[x] && !db.assign[x^1])
+			if(!db.assign[x] && !db.assign[x.neg])
 			{
 				if(auto posScore = cast(int)db.propagate(x).length)
 				{
 					db.unroll(x);
 
-					if(auto negScore = cast(int)db.propagate(x^1).length)	// both work -> unroll (and score it for decision)
+					if(auto negScore = cast(int)db.propagate(x.neg).length)	// both work -> unroll (and score it for decision)
 					{
-						db.unroll(x^1);
+						db.unroll(x.neg);
 
 						int score = posScore + negScore + posScore*negScore;	// this scoring can/should be tweaked
 						if(score > bestScore)
@@ -44,16 +44,16 @@ final class Solver
 						db.propagate(x);
 
 						bestScore = -1;
-						suggestedLiteral = -1;
+						suggestedLiteral = Lit.nil;
 						stop = x;
 					}
 				}
 				else
 				{
-					if(db.propagate(x^1))	// negative worked, positive not
+					if(db.propagate(x.neg))	// negative worked, positive not
 					{
 						bestScore = -1;
-						suggestedLiteral = -1;
+						suggestedLiteral = Lit.nil;
 						stop = x;
 					}
 					else	// both dont work -> conflict
@@ -61,7 +61,7 @@ final class Solver
 				}
 			}
 
-			x = (x+2)%(db.varCount*2);
+			x.toInt = (x.toInt+2) % (2*db.varCount);
 		}
 		while(x != stop);
 
@@ -72,24 +72,24 @@ final class Solver
 	bool[] solve()
 	{
 		writefln("c start solver: v=%s c=%s", db.varCount, db.clauseCount);
-		Array!int decStack;
+		Array!Lit decStack;
 		decStack.reserve(db.varCount);	// wont grow that large if we did anything right
 
 		while(true)
 		{
-			int x = -1;
+			Lit x;
 			if(forceFailedLiteral(x) == false)	// if forcing fails -> conflict
 			{
 				if(decStack.empty)	// no decision to revert -> UNSAT
 					return null;
-				int y = decStack.popBack;
+				Lit y = decStack.popBack;
 				db.unroll(y);
-				if(db.propagate(y^1).length == 0)
+				if(db.propagate(y.neg).length == 0)
 					throw new Exception("nah, cant happen");
 				continue;
 			}
 
-			if(x == -1)	// no free literal -> solution found
+			if(x == Lit.nil)	// no free literal -> solution found
 				return db.assign[];
 
 			decStack.pushBack(x);

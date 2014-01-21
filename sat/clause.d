@@ -2,22 +2,23 @@ module sat.clause;
 
 import jive.array;
 private import std.algorithm : move, swap;
+import sat.sat;
 
 final class ClauseDB
 {
 	const int varCount;	// note: making this unsigned will/has/might lead to bugs
 	int clauseCount;
 
-	Array!(Array!int) clausesBin;
+	Array!(Array!Lit) clausesBin;
 
-	static struct pair { int a,b; }
+	static struct pair { Lit a,b; }
 	Array!(Array!pair) clausesTri;
 
-	Array!(Array!int) clausesLong;
+	Array!(Array!Lit) clausesLong;	// no need for sorting, so don't use Clause
 	Array!(Array!int) occsLong;
 
 	Array!bool assign;
-	Array!int stack;
+	Array!Lit stack;
 
 	this(int varCount)
 	{
@@ -31,7 +32,7 @@ final class ClauseDB
 		assign.resize(2*varCount);
 	}
 
-	void addClause(int[] c)	// NOTE: makes copy of the clause
+	void addClause(Lit[] c)	// NOTE: makes copy of clause (if applicable, as short clauses are implicit)
 	{
 		++clauseCount;
 
@@ -56,12 +57,12 @@ final class ClauseDB
 				assert(c.length >= 4);
 				foreach(x; c)
 					occsLong[x].pushBack(cast(int)clausesLong.length);
-				clausesLong.pushBack(Array!int(c[]));
+				clausesLong.pushBack(Array!Lit(c));
 				break;
 		}
 	}
 
-	void set(int x)
+	void set(Lit x)
 	{
 		assign[x] = true;
 		stack.pushBack(x);
@@ -71,12 +72,12 @@ final class ClauseDB
 	    returns slice of newly set variable
 	    returns empty non-null if literal was already set
 	    returns null on conflict (state unchanged in this case) **/
-	int[] propagate(int _x)
+	Lit[] propagate(Lit _x)
 	{
 		if(assign[_x])
 			return stack[$..$];	// note this is not null
 
-		if(assign[_x^1])
+		if(assign[_x.neg])
 			return null;
 
 		size_t pos = stack.length;
@@ -88,7 +89,7 @@ final class ClauseDB
 		{
 			auto x = stack[pos++];
 
-			foreach(int y; clausesBin[x^1])
+			foreach(Lit y; clausesBin[x.neg])
 			{
 				if(assign[y])
 					continue;
@@ -103,13 +104,13 @@ final class ClauseDB
 				set(y);
 			}
 
-			foreach(pair c; clausesTri[x^1])
+			foreach(pair c; clausesTri[x.neg])
 			{
 				if(assign[c.a] || assign[c.b])	// clause satisfied -> do nothing
 					continue;
 
-				if(assign[c.a^1])
-					if(assign[c.b^1])
+				if(assign[c.a.neg])
+					if(assign[c.b.neg])
 					{
 						while(stack.length != startpos)
 							assign[stack.popBack] = false;
@@ -118,32 +119,31 @@ final class ClauseDB
 					else
 						set(c.b);
 				else
-					if(assign[c.b^1])
+					if(assign[c.b.neg])
 						set(c.a);
 					else
 						continue;
 			}
 
-			outer: foreach(i; occsLong[x^1])
+			outer: foreach(i; occsLong[x.neg])
 			{
-				int[] c = clausesLong[i][];
+				Lit unit = Lit.nil;
 
-				int unit = -1;
-				foreach(y; c)
+				foreach(y; clausesLong[i])
 				{
 					if(assign[y])
 						continue outer;	// clause satisfied -> do nothing
 
-					if(assign[y^1])
+					if(assign[y.neg])
 						continue;
 
-					if(unit != -1)
+					if(unit != Lit.nil)
 						continue outer;	// clause not unit (might also be satisfied) -> do nothing
 
 					unit = y;
 				}
 
-				if(unit == -1) // clause all false -> conflict
+				if(unit == Lit.nil) // clause all false -> conflict
 				{
 					while(stack.length != startpos)
 						assign[stack.popBack] = false;
@@ -157,11 +157,11 @@ final class ClauseDB
 		return stack[startpos..$];
 	}
 
-	void unroll(int x)
+	void unroll(Lit x)
 	{
 		while(true)
 		{
-			int y = stack.popBack;
+			Lit y = stack.popBack;
 			//assert(assign[y]);
 			assign[y] = false;
 			if(y == x)

@@ -15,21 +15,46 @@ import sat.clause, sat.solver;
 
 struct Lit
 {
-	union
+	uint toInt;
+	alias toInt this;
+	static assert(Lit.sizeof == uint.sizeof);
+	// NOTE: don't use std.bitmanip:bitfields. The asserts it contains are more annoying than helpful
+
+	static enum Lit nil = Lit(-1);
+
+	this(uint v, bool s)
 	{
-		uint toInt;
-		mixin(bitfields!(
-			bool, "sign", 1,
-			uint, "var", 31
-			));
+		toInt = (v<<1) | s;
 	}
 
-	alias toInt this;
-
-	this(uint var, bool sign)
+	private this(uint i)
 	{
-		this.var = var;
-		this.sign = sign;
+		toInt = i;
+	}
+
+	uint var() const @property
+	{
+		return toInt >> 1;
+	}
+
+	void var(uint v) @property
+	{
+		toInt = (toInt & 1) | (v << 1);
+	}
+
+	bool sign() const @property
+	{
+		return toInt & 1;
+	}
+
+	void sign(bool s) @property
+	{
+		toInt = (toInt & ~1) | s;
+	}
+
+	Lit neg() const @property
+	{
+		return Lit(toInt ^ 1);
 	}
 
 	int toDimacs() const @property
@@ -46,11 +71,6 @@ struct Lit
 		l.sign = x<0;
 		l.var = abs(x)-1;
 		return l;
-	}
-
-	Lit neg() const @property
-	{
-		return Lit(var, !sign);
 	}
 }
 
@@ -340,7 +360,7 @@ final class Sat
 		foreach(ci, ref c; clauses)
 			if(c.length)
 		{
-			int buf[500];
+			Lit buf[256];
 			foreach(size_t i, x; c)
 			{
 				assert(renum[x.var] != -1, "problem still contains removed variables");
