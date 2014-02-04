@@ -15,7 +15,7 @@ void main(string[] args)
 	try
 	{
 		int varCount;
-		Array!Clause clauses;
+		Array!(Array!Lit) clauses;
 
 		writefln("c reading file %s", args[1]);
 		readDimacs(args[1], varCount, clauses);
@@ -37,8 +37,9 @@ void main(string[] args)
 		writefln("s SATISFIABLE");
 		sat.writeAssignment();
 
-		if(!sat.isSatisfied(clauses))
-			throw new Exception("FINAL TEST FAIL");
+		foreach(ref c; clauses)
+			if(!sat.isSatisfied(c[]))
+				throw new Exception("FINAL TEST FAIL");
 	}
 	catch(Unsat e)
 	{

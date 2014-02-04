@@ -20,8 +20,6 @@ struct Lit
 	static assert(Lit.sizeof == uint.sizeof);
 	// NOTE: don't use std.bitmanip:bitfields. The asserts it contains are more annoying than helpful
 
-	static enum Lit nil = Lit(-1);
-
 	this(uint v, bool s)
 	{
 		toInt = (v<<1) | s;
@@ -65,12 +63,39 @@ struct Lit
 			return var+1;
 	}
 
+	string toString() const @property
+	{
+		switch(this.toInt)
+		{
+			case nil: return "nil";
+			case one: return "true";
+			case zero: return "false";
+			default: return to!string(toDimacs);
+		}
+	}
+
 	static Lit fromDimacs(int x)
 	{
 		Lit l;
 		l.sign = x<0;
 		l.var = abs(x)-1;
 		return l;
+	}
+
+	static enum Lit nil = Lit(-1);
+	static enum Lit one = Lit(-2, false);
+	static enum Lit zero = Lit(-2, true);
+	static assert(one.fixed);
+	static assert(zero.fixed);
+
+	bool fixed() const @property
+	{
+		return (toInt&~1) == -4;
+	}
+
+	bool proper() const @property
+	{
+		return (toInt & (1U<<31)) == 0;
 	}
 }
 
@@ -79,9 +104,9 @@ struct Clause
 	FlatSet!Lit lits;
 	alias lits this;
 
-	this(Lit[] lits)
+	this(Array!Lit lits)
 	{
-		this.lits = lits;
+		this.lits = FlatSet!Lit(move(lits));
 	}
 
 	uint signs() const @property
@@ -96,7 +121,7 @@ struct Clause
 
 	string toString() const @property
 	{
-		return join(map!"to!string(a.toDimacs)"(lits[]), " ");
+		return join(map!"a.toString"(lits[]), " ");
 	}
 
 	bool tautological() const @property
@@ -112,65 +137,35 @@ final class Sat
 {
 	Array!Clause clauses;	// length=0 means clause was removed
 	Array!(Array!int) occs;	// can contain removed clauses
-	Array!VarState var;
-	Queue!uint prop;	// propagation queue
+	Array!Lit var;			// nil if undef, fixed if fixed, actual literal if equivalence
+	Queue!uint prop;		// propagation queue
 	int varCount;
-
-	enum : uint
-	{
-		undef = 0,
-		set,
-		eq,
-	}
-
-	struct VarState
-	{
-		mixin(bitfields!(
-			uint, "state", 2,
-			bool, "sign", 1,
-			uint, "eq", 29
-			));
-	}
 
 	/** NOTE: clauseCount is only an estimate */
 	this(int varCount, int clauseCount = 0)
 	{
 		this.varCount = varCount;
-		var.resize(varCount);
+		var.resize(varCount, Lit.nil);
 		occs.resize(2*varCount);
 		clauses.reserve(clauseCount);
 	}
 
 	Lit rootLiteral(Lit l)
 	{
-		while(var[l.var].state == eq)
-		{
-			l.sign = l.sign ^ var[l.var].sign;
-			l.var = var[l.var].eq;
-		}
+		while(l.proper && var[l.var] != Lit.nil)
+			if(l.sign)
+				l = var[l.var].neg;
+			else
+				l = var[l.var];
 		return l;
 	}
 
-	bool isSatisfied(Lit l)
-	{
-		l = rootLiteral(l);
-		return var[l.var].state == set && (var[l.var].sign == l.sign);
-	}
-
-	bool isSatisfied(const ref Clause c)
+	bool isSatisfied(const Lit[] c)
 	{
 		foreach(l; c)
-			if(isSatisfied(l))
+			if(rootLiteral(l) == Lit.one)
 				return true;
 		return false;
-	}
-
-	bool isSatisfied(const ref Array!Clause cs)
-	{
-		foreach(ref c; cs)
-			if(!isSatisfied(c))
-				return false;
-		return true;
 	}
 
 	void writeAssignment()
@@ -178,9 +173,9 @@ final class Sat
 		writef("v");
 		for(uint v = 0; v < varCount; ++v)
 		{
-			Lit l =  rootLiteral(Lit(v,false));
-			assert(var[l.var].state == set, "tried to output incomplete assignment");
-			writef(" %s", Lit(v, var[l.var].sign ^ l.sign).toDimacs);
+			Lit l = rootLiteral(Lit(v,false));
+			assert(l.fixed, "tried to output incomplete assignment");
+			writef(" %s", Lit(v, l.sign).toDimacs);
 		}
 		writefln(" 0");
 	}
@@ -189,17 +184,17 @@ final class Sat
 	{
 		l = rootLiteral(l);
 
-		if(var[l.var].state == set)
-		{
-			if(var[l.var].sign == l.sign)
-				return;
-			else
-				throw new Unsat;
-		}
+		if(l == Lit.one)
+			return;
 
-		assert(var[l.var].state == undef);
-		var[l.var].state = set;
-		var[l.var].sign = l.sign;
+		if(l == Lit.zero)
+			throw new Unsat;
+
+		assert(var[l.var] == Lit.nil);
+		if(!l.sign)
+			var[l.var] = Lit.one;
+		else
+			var[l.var] = Lit.zero;
 		prop.push(l.var);
 	}
 
@@ -207,26 +202,25 @@ final class Sat
 	{
 		a = rootLiteral(a);
 		b = rootLiteral(b);
-		bool sign = a.sign^b.sign;
-		uint v = a.var, w = b.var;
 
-		if(v == w)
-			if(sign)
-				throw new Unsat;
-			else
+		// if both are the same variable or both are fixed, there is nothing to do
+		if(a.var == b.var)
+			if(a.sign == b.sign)
 				return;
+			else
+				throw new Unsat;
 
-		if(var[v].state == set)
-			return setLiteral(Lit(w, var[v].sign^sign));
-		if(var[w].state == set)
-			return setLiteral(Lit(v, var[w].sign^sign));
+		// if one is fixed, just set the other one
+		if(a.fixed)
+			return setLiteral(Lit(b.var, b.sign^a.sign));
+		if(b.fixed)
+			return setLiteral(Lit(a.var, a.sign^b.sign));
 
-		assert(var[v].state == undef);
-		assert(var[w].state == undef);
-		var[w].state = eq;
-		var[w].eq = v;
-		var[w].sign = sign;
-		prop.push(w);
+		// otherwise, we have an actual equivalence
+		assert(var[a.var] == Lit.nil);
+		assert(var[b.var] == Lit.nil);
+		var[b.var] = Lit(a.var, a.sign^b.sign);
+		prop.push(b.var);
 	}
 
 	/** returns number of vars propagated */
@@ -236,69 +230,78 @@ final class Sat
 		while(!prop.empty)
 		{
 			++count;
-			uint v = prop.pop();
+			Lit a = Lit(prop.pop(), false);
+			Lit b = rootLiteral(a);
+			assert(a.var != b.var);
 
-			if(var[v].state == set)
-			{
-				bool s = var[v].sign;
-				auto occsPos = move(occs[Lit(v,s)]);
-				auto occsNeg = move(occs[Lit(v,!s)]);
+			//writefln("c propagating %s -> %s", a, b);
 
-				foreach(i; occsPos)
-					removeClause(i);
-
-				foreach(i; occsNeg)
-					if(clauses[i].length)
-					{
-						if(!clauses[i].remove(Lit(v,!s)))
-							assert(false, "corrupt occ-list found while propagating");
-
-						if(clauses[i].length == 1)
-							setLiteral(clauses[i][0]);
-					}
-			}
-			else if(var[v].state == eq)
-			{
-				Lit a = Lit(v,false);
-				Lit b = rootLiteral(a);
-				assert(a != b);
-
-				foreach(i; move(occs[a]))
-					replaceOcc(i, a, b);
-				foreach(i; move(occs[a.neg]))
-					replaceOcc(i, a.neg, b.neg);
-			}
-			else assert(false);
+			foreach(i; move(occs[a]))
+				replaceOcc(i, a, b);
+			foreach(i; move(occs[a.neg]))
+				replaceOcc(i, a.neg, b.neg);
 		}
 
 		return count;
 	}
 
-	void addClause(Clause c)
+	void replaceOcc(int i, Lit a, Lit b)
 	{
-		foreach(l, ref bool rem; &c.prune)
-			if(var[l.var].state == set)
-				if(var[l.var].sign == l.sign)
-					return;
-				else
-					rem = true;
-			else assert(var[l.var].state == undef);
+		assert(a.proper);
+		assert(b != Lit.nil);
+
+		if(clauses[i].length == 0)
+			return;
+
+		assert(a in clauses[i].lits);
+
+		if(b == Lit.one)
+			return removeClause(i);
+
+		if(!clauses[i].remove(a))
+			assert(false, "corrupt occ-list");
+
+		if(b != Lit.zero)
+			if(clauses[i].add(b))
+				occs[b].pushBack(i);
+
+		if(clauses[i].length == 1)
+			setLiteral(clauses[i][0]);
+
+		if(clauses[i].tautological)
+			removeClause(i);
+	}
+
+	void addClause(Array!Lit c)
+	{
+		foreach(ref l, ref bool rem; &c.prune)
+		{
+			l = rootLiteral(l);
+			if(l == Lit.one)
+				return;
+			else if(l == Lit.zero)
+				rem = true;
+			else
+				assert(l.proper);
+		}
 
 		if(c.length == 0)
 			throw new Unsat;
 
-		if(c.length == 1)
+		auto d = Clause(move(c));
+
+		if(d.length == 1)
 		{
-			setLiteral(c[0]);
+			setLiteral(d[0]);
 			return;
 		}
 
-		if(c.tautological)
+		if(d.tautological)
 			return;
 
-		foreach(x; c)
+		foreach(x; d)
 			occs[x].pushBack(cast(int)clauses.length);
-		clauses.pushBack(move(c));
+		clauses.pushBack(move(d));
 	}
 
 	void removeClause(int i)
@@ -323,17 +326,6 @@ final class Sat
 		return -1;
 	}
 
-
-	void replaceOcc(int i, Lit a, Lit b)
-	{
-		if(clauses[i].remove(a) && clauses[i].add(b))
-			occs[b].pushBack(i);
-		if(clauses[i].length == 1)
-			setLiteral(clauses[i][0]);
-		if(clauses[i].tautological)
-			clauses[i].resize(0);
-	}
-
 	void dump()
 	{
 		foreach(ref c; clauses)
@@ -347,7 +339,7 @@ final class Sat
 		renum[] = -1;
 		int j = 0;
 		for(int v = 0; v < varCount; ++v)
-			if(var[v].state == undef)
+			if(var[v] == Lit.nil)
 				renum[v] = j++;
 
 		if(j == 0)
@@ -363,7 +355,7 @@ final class Sat
 			Lit buf[256];
 			foreach(size_t i, x; c)
 			{
-				assert(renum[x.var] != -1, "problem still contains removed variables");
+				assert(renum[x.var] != -1, "problem still contains removed variable: "~x.toString);
 				buf[i] = Lit(renum[x.var], x.sign);
 			}
 			db.addClause(buf[0..c.length]);
@@ -376,12 +368,11 @@ final class Sat
 		for(int v = 0; v < varCount; ++v)
 		if(renum[v] != -1)
 		{
-			assert(var[v].state == undef);
-			var[v].state = set;
+			assert(var[v] == Lit.nil);
 			if(sol[Lit(renum[v], false)])
-				var[v].sign = false;
+				var[v] = Lit.one;
 			else if(sol[Lit(renum[v], true)])
-				var[v].sign = true;
+				var[v] = Lit.zero;
 			else assert(false);
 		}
 	}

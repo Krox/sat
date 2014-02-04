@@ -12,7 +12,7 @@ import sat.sat;
  * read a .cnf file in dimacs format.
  * NOTE: 'p' lines are not required
  */
-void readDimacs(string filename, ref int varCount, ref Array!Clause clauses)
+void readDimacs(string filename, ref int varCount, ref Array!(Array!Lit) clauses)
 {
 	auto buf = readText(filename);
 	Array!Lit clauseBuf;
@@ -55,7 +55,7 @@ void readDimacs(string filename, ref int varCount, ref Array!Clause clauses)
 					clauseBuf.pushBack(Lit.fromDimacs(x));
 					buf = stripLeft(buf);
 				}
-				clauses.pushBack(Clause(clauseBuf[]));
+				clauses.pushBack(clauseBuf);
 				clauseBuf.resize(0);
 				break;
 		}

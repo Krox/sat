@@ -18,10 +18,17 @@ struct FlatSet(V)
 	/// constructors
 	//////////////////////////////////////////////////////////////////////
 
+	/** constructor that makes copy of range contents */
 	this(Stuff)(Stuff data)
 		if(!is(Stuff:V) && isInputRange!Stuff && is(ElementType!Stuff:V))
 	{
-		vals = Array!V(data);
+		this(Array!V(data));
+	}
+
+	/** constructor that takes an array (no memory allocation when used with 'move') **/
+	this(Array!V stuff)
+	{
+		vals = move(stuff);
 
 		if(empty)
 			return;
