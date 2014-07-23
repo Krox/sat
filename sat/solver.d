@@ -1,6 +1,7 @@
 module sat.solver;
 
 import std.stdio;
+import std.datetime : Clock;
 import jive.array;
 import sat.sat, sat.clause;
 
@@ -69,7 +70,7 @@ final class Solver
 	}
 
 	/** return null on UNSAT */
-	bool[] solve()
+	bool[] solve(int timeout)
 	{
 		writefln("c start solver: v=%s c=%s", db.varCount, db.clauseCount);
 		Array!Lit decStack;
@@ -82,6 +83,8 @@ final class Solver
 			{
 				if(decStack.empty)	// no decision to revert -> UNSAT
 					return null;
+				if(timeout && Clock.currAppTick.seconds >= timeout)
+					throw new Timeout();
 				Lit y = decStack.popBack;
 				db.unroll(y);
 				if(db.propagate(y.neg).length == 0)

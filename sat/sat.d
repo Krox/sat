@@ -333,7 +333,7 @@ final class Sat
 				writefln("%s 0", c);
 	}
 
-	void solve()
+	void solve(int timeout)
 	{
 		auto renum = new int[varCount];
 		renum[] = -1;
@@ -361,7 +361,7 @@ final class Sat
 			db.addClause(buf[0..c.length]);
 		}
 
-		auto sol = (new Solver(db)).solve();
+		auto sol = (new Solver(db)).solve(timeout);
 		if(sol is null)
 			throw new Unsat;
 
@@ -383,5 +383,13 @@ class Unsat : Exception
 	this()
 	{
 		super("answer is unsat");
+	}
+}
+
+class Timeout : Exception
+{
+	this()
+	{
+		super("solver timed out");
 	}
 }
