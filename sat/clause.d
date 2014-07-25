@@ -244,7 +244,8 @@ final class ClauseDB
 	 */
 	Lit[] analyzeConflict()
 	{
-		assert(conflict !is null);
+		assert(conflict !is null, "no conflict here to be analyzed");
+		assert(currLevel > 0, "analyzing a conflict on level 0 does not make sense");
 
 		seen.reset();
 		static Array!Lit buf;
@@ -254,7 +255,7 @@ final class ClauseDB
 
 		void visit(Lit lit)
 		{
-			if(seen[lit.var])
+			if(seen[lit.var] || level[lit.var] == 0) // level 0 assignments are definite, so these variables can be skipped
 				return;
 			seen[lit.var] = true;
 

@@ -3,15 +3,18 @@ module sat.solver;
 import std.stdio;
 import std.datetime : Clock;
 import jive.array;
+import jive.lazyarray;
 import sat.sat, sat.clause;
 
 final class Solver
 {
 	ClauseDB db;
+	LazyBitArray blocked;
 
 	this(ClauseDB db)
 	{
 		this.db = db;
+		blocked.resize(db.varCount*2);
 	}
 
 	bool failedLiteralProbing(ref Lit branch)
@@ -20,14 +23,18 @@ final class Solver
 		branch = Lit.nil;
 
 		db.bumpLevel();
+		blocked.reset();
 
-		for(Lit lit = Lit(0, false); lit.toInt < db.varCount*2; ++lit.toInt)
-			if(!db.assign[lit] && !db.assign[lit.neg])
+		for(Lit lit = Lit(0, false); lit.toInt < db.varCount*2; ++lit.toInt) // TODO: do in in non-arbitrary order to better exploit dominating literals
+			if(!db.assign[lit] && !db.assign[lit.neg] && !blocked[lit])
 			{
 				auto r = db.propagate(lit, Reason.descision);
 
 				if(r is null) // there was a conflict
 					return false;
+
+				foreach(x; r[1..$])
+					blocked[x] = true;
 
 				int score = cast(int)r.length;
 				db.unrollCurrLevel();
@@ -63,7 +70,7 @@ final class Solver
 				{
 					db.unrollLevel(0);
 					if(db.propagate(conflictClause[0], Reason.unit) is null)
-						throw new Exception("I think this can not happen");
+						return null;
 				}
 				else
 				{
