@@ -14,90 +14,74 @@ final class Solver
 		this.db = db;
 	}
 
-	bool forceFailedLiteral(ref Lit suggestedLiteral) // false, if a conflict was discovered (resulting assign is NOT clean)
+	bool failedLiteralProbing(ref Lit branch)
 	{
 		int bestScore = -1;
-		suggestedLiteral = Lit.nil;
-		Lit stop;
-		Lit x;
+		branch = Lit.nil;
 
-		do // TODO: use some non-arbitrary order here (in particular, exploit dominating literals)
-		{
-			if(!db.assign[x] && !db.assign[x.neg])
+		db.bumpLevel();
+
+		for(Lit lit = Lit(0, false); lit.toInt < db.varCount*2; ++lit.toInt)
+			if(!db.assign[lit] && !db.assign[lit.neg])
 			{
-				if(auto posScore = cast(int)db.propagate(x).length)
+				auto r = db.propagate(lit, Reason.descision);
+
+				if(r is null) // there was a conflict
+					return false;
+
+				int score = cast(int)r.length;
+				db.unrollCurrLevel();
+
+				if(score > bestScore)
 				{
-					db.unroll(x);
-
-					if(auto negScore = cast(int)db.propagate(x.neg).length)	// both work -> unroll (and score it for decision)
-					{
-						db.unroll(x.neg);
-
-						int score = posScore + negScore + posScore*negScore;	// this scoring can/should be tweaked
-						if(score > bestScore)
-						{
-							suggestedLiteral = x;
-							bestScore = score;
-						}
-					}
-					else	// positive worked, negative not
-					{
-						db.propagate(x);
-
-						bestScore = -1;
-						suggestedLiteral = Lit.nil;
-						stop = x;
-					}
-				}
-				else
-				{
-					if(db.propagate(x.neg))	// negative worked, positive not
-					{
-						bestScore = -1;
-						suggestedLiteral = Lit.nil;
-						stop = x;
-					}
-					else	// both dont work -> conflict
-						return false;
+					bestScore = score;
+					branch = lit;
 				}
 			}
-
-			x.toInt = (x.toInt+2) % (2*db.varCount);
-		}
-		while(x != stop);
 
 		return true;
 	}
 
 	/** return null on UNSAT */
-	bool[] solve(int timeout)
+	bool[] solve(int timeout = 0)
 	{
 		writefln("c start solver: v=%s c=%s", db.varCount, db.clauseCount);
-		Array!Lit decStack;
-		decStack.reserve(db.varCount);	// wont grow that large if we did anything right
 
 		while(true)
 		{
-			Lit x;
-			if(forceFailedLiteral(x) == false)	// if forcing fails -> conflict
+			Lit branch;
+			if(!failedLiteralProbing(branch))
 			{
-				if(decStack.empty)	// no decision to revert -> UNSAT
+				handleConflict:
+
+				auto conflictClause = db.analyzeConflict();
+
+				if(db.currLevel == 0) // conflict on level 0 -> UNSAT
 					return null;
-				if(timeout && Clock.currAppTick.seconds >= timeout)
-					throw new Timeout();
-				Lit y = decStack.popBack;
-				db.unroll(y);
-				if(db.propagate(y.neg).length == 0)
-					throw new Exception("nah, cant happen");
-				continue;
+
+				if(conflictClause.length == 1)
+				{
+					db.unrollLevel(0);
+					if(db.propagate(conflictClause[0], Reason.unit) is null)
+						throw new Exception("I think this can not happen");
+				}
+				else
+				{
+					db.unrollLevel(db.level[conflictClause[1].var]);
+					auto reason = db.addClause(conflictClause);
+					if(db.propagate(conflictClause[0], reason) is null)
+						goto handleConflict;
+				}
 			}
-
-			if(x == Lit.nil)	// no free literal -> solution found
+			else if(branch != Lit.nil)
+			{
+				if(db.propagate(branch, Reason.descision) is null)
+					throw new Exception("cannot happen"); // this would have been detected in failed literal probing
+			}
+			else
 				return db.assign[];
-
-			decStack.pushBack(x);
-			if(db.propagate(x).length == 0)
-				throw new Exception("cannot happen");	// this would have been detected in failed literal probing
 		}
+
+		assert(false);
 	}
 }
