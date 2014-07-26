@@ -2,7 +2,6 @@ module sat.xor;
 
 import jive.array;
 import jive.flatset;
-import jive.unionfind;
 private import core.bitop : popcnt;
 private import std.stdio;
 private import std.range;
@@ -43,12 +42,22 @@ final class XorSolver
 {
 	Sat sat;
 	Array!XorClause clauses;
+	Array!(FlatSet!int) occ;
 
 	this(Sat sat)
 	{
 		this.sat = sat;
+		occ.resize(sat.varCount);
 	}
 
+	void addClause(XorClause c)
+	{
+		foreach(l; c.lits)
+			occ[l].pushBack(cast(int)clauses.length);
+		clauses.pushBack(move(c));
+	}
+
+	/** search for xor clauses encoded in the cnf clauses */
 	void search()
 	{
 		Array!bool mark;
@@ -68,64 +77,110 @@ final class XorSolver
 								mark[j] = true;
 						}
 
-					clauses.pushBack(XorClause(c));
+					addClause(XorClause(c));
 				}
 	}
 
+	/** do Gaussian elimination */
 	void gauss()
 	{
-		auto uf = UnionFind(sat.varCount);
-		foreach(ref c; clauses)
-			uf.join(c[]);
+		writefln("c gaussing %s xors", clauses.length);
 
-		auto comps = uf.components();
-
-		writefln("c gaussing %s xors in %s components", clauses.length, comps[0]);
-
-		auto blocks = Array!(Array!int)(comps[0]);
-		foreach(int i, ref c; clauses)
-			blocks[comps[1][c[0]]].pushBack(i);
-
-		foreach(ref b; blocks)
-			gauss(indexed(clauses[], b[]));
-	}
-
-	static void gauss(Clauses)(Clauses clauses)
-		if(isRandomAccessRange!Clauses && is(ElementType!Clauses==XorClause))
-	{
-		foreach(ref c; clauses)
+		for(int i = 0; i < clauses.length; ++i)
 		{
-			if(c.length == 0)
+			if(clauses[i].length == 0)
 				continue;
 
-			int pivot = c[0];
-			foreach(ref d; clauses)
-				if(&c != &d) // should use index-comparison instead, but std.range:indexed does not allow that
-					if(pivot in d)
-						d += c;
+			// choose pivot with fewest occurences
+			int pivot = clauses[i][0];
+			foreach(p; clauses[i][][1..$])
+				if(occ[p].length < occ[pivot].length)
+					pivot = p;
+
+			foreach(j; occ[pivot])
+				if(i != j)
+				{
+					assert(pivot in clauses[j]);
+					clauses[j] += clauses[i];
+				}
+
+			if(!occ[pivot].remove(i))
+				assert(false);
+
+			foreach(l; clauses[i])
+				if(l != pivot)
+					occ[l] = occ[l].symmetricDifference(occ[pivot]);
+
+			occ[pivot].resize(1);
+			occ[pivot][0] = i;
 		}
+
 	}
 
+	/** put unit clauses and equivalences back into the cnf problem */
 	void implement()
 	{
-		foreach(i, ref c; clauses)
+		foreach(ref c, ref bool rem; &clauses.prune)
 			switch(c.length)
 			{
 				case 0:
 					if(c.rhs)
 						throw new Unsat;
+					rem = true;
 					break;
 
 				case 1:
 					sat.setLiteral(Lit(c[0], !c.rhs));
+					rem = true;
 					break;
 
 				case 2:
 					sat.setEquivalence(Lit(c[0], false), Lit(c[1], c.rhs));
+					rem = true;
 					break;
 
 				default:
 					break;
 			}
+
+		outer: foreach(ref c; clauses)
+		{
+			for(int i = 0; i < c.length; ++i)
+				if(occ[c[i]].length == 1)
+				{
+					int pivot = c[i];
+					for(int j = i; j >= 1; --j)
+						c[j] = c[j-1];
+					c[0] = pivot;
+					continue outer;
+				}
+			throw new Exception("xor system not fully gaussed");
+		}
+
+		sort!"a.lits[1..$] < b.lits[1..$]"(clauses[]);
+
+		for(int i = 1; i < clauses.length; ++i)
+			if(clauses[i-1].lits[][1..$] == clauses[i].lits[][1..$])
+				sat.setEquivalence(Lit(clauses[i-1][0], false), Lit(clauses[i][0], clauses[i-1].rhs^clauses[i].rhs));
+	}
+
+	/** check occ lists, for debugging */
+	void check()
+	{
+		size_t count = 0;
+
+		for(int l = 0; l < occ.length; ++l)
+		{
+			count += occ[l].length;
+			foreach(i; occ[l])
+				assert(l in clauses[i]);
+		}
+
+		writefln("c checked (# = %s)", count);
+
+		foreach(ref c; clauses)
+			count -= c.length;
+
+		assert(count == 0);
 	}
 }
