@@ -139,15 +139,71 @@ final class Sat
 	Array!(Array!int) occs;	// can contain removed clauses
 	Array!Lit var;			// nil if undef, fixed if fixed, actual literal if equivalence
 	Queue!uint prop;		// propagation queue
-	int varCount;
+	int varCount() const @property { return cast(int)var.length; }
+
+	Array!Lit renum;		// original -> current. proper refers to current literal, fixed is fixed
 
 	/** NOTE: clauseCount is only an estimate */
 	this(int varCount, int clauseCount = 0)
 	{
-		this.varCount = varCount;
 		var.resize(varCount, Lit.nil);
 		occs.resize(2*varCount);
 		clauses.reserve(clauseCount);
+
+		renum.resize(varCount);
+		for(int v = 0; v < varCount; ++v)
+			renum[v] = Lit(v, false);
+	}
+
+	/** renumber variables and make new occ-lists */
+	void cleanup()
+	{
+		assert(prop.empty);
+
+		auto trans = Array!int(varCount, -1); // old roots -> new
+		int k = 0;
+		for(int i = 0; i < varCount; ++i)
+			if(var[i] == Lit.nil)
+				trans[i] = k++;
+
+		for(int i = 0; i < renum.length; ++i)
+			if(renum[i].proper)
+			{
+				auto l = rootLiteral(renum[i]);
+
+				if(l.fixed)
+					renum[i] = l;
+				else
+				{
+					assert(trans[l.var] != -1);
+					renum[i] = Lit(trans[l.var], l.sign);
+				}
+			}
+			else
+				assert(renum[i].fixed);
+
+		foreach(ref c, ref bool rem; &clauses.prune)
+		{
+			if(c.length == 0)
+				rem = true;
+			else
+				foreach(ref l; c)
+				{
+					assert(var[l.var] == Lit.nil);
+					assert(trans[l.var] != -1);
+					l = Lit(trans[l.var], l.sign);
+				}
+		}
+
+		var.resize(k);
+		var[] = Lit.nil;
+
+		occs.resize(2*varCount);
+		foreach(ref list; occs)
+			list.resize(0);
+		foreach(int i, ref c; clauses)
+			foreach(l; c)
+				occs[l].pushBack(i);
 	}
 
 	Lit rootLiteral(Lit l)
@@ -160,22 +216,31 @@ final class Sat
 		return l;
 	}
 
+	/** c is in original variable numbers */
 	bool isSatisfied(const Lit[] c)
 	{
 		foreach(l; c)
-			if(rootLiteral(l) == Lit.one)
+		{
+			auto s = renum[l.var];
+			assert(s.fixed);
+			if(l.sign)
+				s = s.neg;
+			if(s == Lit.one)
 				return true;
+			else assert(s == Lit.zero);
+		}
 		return false;
 	}
 
+	/** write assignment in dimacs format using original variable numbers */
 	void writeAssignment()
 	{
 		writef("v");
-		for(uint v = 0; v < varCount; ++v)
+		for(int i = 0; i < renum.length; ++i)
 		{
-			Lit l = rootLiteral(Lit(v,false));
+			Lit l = rootLiteral(renum[i]);
 			assert(l.fixed, "tried to output incomplete assignment");
-			writef(" %s", Lit(v, l.sign).toDimacs);
+			writef(" %s", Lit(i, l.sign).toDimacs);
 		}
 		writefln(" 0");
 	}
@@ -335,44 +400,30 @@ final class Sat
 
 	void solve(int timeout)
 	{
-		auto renum = new int[varCount];
-		renum[] = -1;
-		int j = 0;
-		for(int v = 0; v < varCount; ++v)
-			if(var[v] == Lit.nil)
-				renum[v] = j++;
+		cleanup();
 
-		if(j == 0)
+		if(varCount == 0)
 		{
 			writefln("c all variables set in preprocessing");
 			return;
 		}
 
-		auto db = new ClauseDB(j);
+		auto db = new ClauseDB(varCount);
 		foreach(ci, ref c; clauses)
 			if(c.length)
-		{
-			Lit buf[256];
-			foreach(size_t i, x; c)
-			{
-				assert(renum[x.var] != -1, "problem still contains removed variable: "~x.toString);
-				buf[i] = Lit(renum[x.var], x.sign);
-			}
-			db.addClause(buf[0..c.length]);
-		}
+				db.addClause(c[]);
 
 		auto sol = (new Solver(db)).solve(timeout);
 		if(sol is null)
 			throw new Unsat;
 
 		for(int v = 0; v < varCount; ++v)
-		if(renum[v] != -1)
 		{
 			assert(var[v] == Lit.nil);
-			if(sol[Lit(renum[v], false)])
-				var[v] = Lit.one;
-			else if(sol[Lit(renum[v], true)])
-				var[v] = Lit.zero;
+			if(sol[Lit(v, false)])
+				setLiteral(Lit(v, false));
+			else if(sol[Lit(v, true)])
+				setLiteral(Lit(v, true));
 			else assert(false);
 		}
 	}

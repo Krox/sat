@@ -45,7 +45,12 @@ int main(string[] args)
 		writefln("c removed %s variables by solving larger xors", sat.propagate());
 
 		sat.solve(timeout);
+		sat.propagate();
+
 		writefln("s SATISFIABLE");
+
+		sat.cleanup();
+
 		sat.writeAssignment();
 
 		foreach(ref c; clauses)
