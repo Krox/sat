@@ -6,15 +6,27 @@ import jive.array;
 import jive.lazyarray;
 import sat.sat, sat.clause;
 
+
+
 final class Solver
 {
 	ClauseDB db;
+	Sat sat;
 	LazyBitArray blocked;
+	Lit probe = Lit(0, false);
 
-	this(ClauseDB db)
+	long nProbes;
+	long nFails;
+
+	this(Sat sat)
 	{
-		this.db = db;
-		blocked.resize(db.varCount*2);
+		this.sat = sat;
+		blocked.resize(sat.varCount*2);
+
+		db = new ClauseDB(sat.varCount);
+		foreach(ci, ref c; sat.clauses)
+			if(c.length)
+				db.addClause(c[]);
 	}
 
 	bool failedLiteralProbing(ref Lit branch)
@@ -25,13 +37,20 @@ final class Solver
 		db.bumpLevel();
 		blocked.reset();
 
-		for(Lit lit = Lit(0, false); lit.toInt < db.varCount*2; ++lit.toInt) // TODO: do in in non-arbitrary order to better exploit dominating literals
-			if(!db.assign[lit] && !db.assign[lit.neg] && !blocked[lit])
+		auto stop = probe;
+
+		do // TODO: do in in non-arbitrary order to better exploit dominating literals
+		{
+			if(!db.assign[probe] && !db.assign[probe.neg] && !blocked[probe])
 			{
-				auto r = db.propagate(lit, Reason.descision);
+				++nProbes;
+				auto r = db.propagate(probe, Reason.descision);
 
 				if(r is null) // there was a conflict
+				{
+					++nFails;
 					return false;
+				}
 
 				foreach(x; r[1..$])
 					blocked[x] = true;
@@ -42,15 +61,18 @@ final class Solver
 				if(score > bestScore)
 				{
 					bestScore = score;
-					branch = lit;
+					branch = probe;
 				}
 			}
+			probe.toInt = (probe.toInt+1)%(db.varCount*2);
+		}
+		while(probe != stop);
 
 		return true;
 	}
 
-	/** return null on UNSAT */
-	bool[] solve(int timeout = 0)
+	/** throws on UNSAT */
+	void solveSome(int numConflicts)
 	{
 		writefln("c start solver: v=%s c=%s", db.varCount, db.clauseCount);
 
@@ -61,19 +83,27 @@ final class Solver
 			{
 				handleConflict:
 
+				if(numConflicts-- == 0)
+					return;
+
 				auto conflictClause = db.analyzeConflict();
+				sat.addClause(Array!Lit(conflictClause));
 
 				if(db.currLevel == 0) // conflict on level 0 -> UNSAT
-					return null;
+					throw new Unsat;
+
+				//writefln("conflict: %s", conflictClause[]);
 
 				if(conflictClause.length == 1)
 				{
+					//writefln("found unit: %s", conflictClause[0]);
 					db.unrollLevel(0);
 					if(db.propagate(conflictClause[0], Reason.unit) is null)
-						return null;
+						throw new Unsat;
 				}
 				else
 				{
+					//writefln("non-unit conflict                  =======");
 					db.unrollLevel(db.level[conflictClause[1].var]);
 					auto reason = db.addClause(conflictClause);
 					if(db.propagate(conflictClause[0], reason) is null)
@@ -86,9 +116,32 @@ final class Solver
 					throw new Exception("cannot happen"); // this would have been detected in failed literal probing
 			}
 			else
-				return db.assign[];
+			{
+				for(int v = 0; v < db.varCount; ++v)
+				{
+					if(db.assign[Lit(v, false)])
+						sat.setLiteral(Lit(v, false));
+					else if(db.assign[Lit(v, true)])
+						sat.setLiteral(Lit(v, true));
+					else assert(false);
+				}
+
+				return;
+			}
 		}
 
 		assert(false);
 	}
+}
+
+void invokeSolver(Sat sat, int numConflicts)
+{
+	sat.cleanup();
+
+	if(sat.varCount == 0)
+		return;
+
+	auto solver = new Solver(sat);
+	solver.solveSome(numConflicts);
+	writefln("c stats: %s probes, %s fails (%s %%)", solver.nProbes, solver.nFails, 100*solver.nFails/cast(float)solver.nProbes);
 }

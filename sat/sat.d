@@ -7,11 +7,9 @@ import jive.flatset;
 private import std.stdio;
 private import std.math : abs;
 private import std.algorithm : move, min, max;
-private import std.bitmanip : bitfields;
 private import std.array : join;
 private import std.conv : to;
 private import std.range : map;
-import sat.clause, sat.solver;
 
 struct Lit
 {
@@ -206,6 +204,14 @@ final class Sat
 				occs[l].pushBack(i);
 	}
 
+	bool allAssigned() const @property
+	{
+		foreach(v; var)
+			if(v == Lit.nil)
+				return false;
+		return true;
+	}
+
 	Lit rootLiteral(Lit l)
 	{
 		while(l.proper && var[l.var] != Lit.nil)
@@ -396,36 +402,6 @@ final class Sat
 		foreach(ref c; clauses)
 			if(c.length)
 				writefln("%s 0", c);
-	}
-
-	void solve(int timeout)
-	{
-		cleanup();
-
-		if(varCount == 0)
-		{
-			writefln("c all variables set in preprocessing");
-			return;
-		}
-
-		auto db = new ClauseDB(varCount);
-		foreach(ci, ref c; clauses)
-			if(c.length)
-				db.addClause(c[]);
-
-		auto sol = (new Solver(db)).solve(timeout);
-		if(sol is null)
-			throw new Unsat;
-
-		for(int v = 0; v < varCount; ++v)
-		{
-			assert(var[v] == Lit.nil);
-			if(sol[Lit(v, false)])
-				setLiteral(Lit(v, false));
-			else if(sol[Lit(v, true)])
-				setLiteral(Lit(v, true));
-			else assert(false);
-		}
 	}
 }
 

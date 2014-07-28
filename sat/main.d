@@ -38,19 +38,23 @@ int main(string[] args)
 
 		writefln("c removed %s variables by unit propagation", sat.propagate());
 
-		solve2sat(sat);
-		writefln("c removed %s variables by solving 2-sat", sat.propagate());
+		for(int round = 1; !sat.allAssigned; ++round)
+		{
+			writefln("c =========================== round %s ===========================", round);
 
-		solveXor(sat);
-		writefln("c removed %s variables by solving larger xors", sat.propagate());
+			solve2sat(sat);
+			writefln("c removed %s variables by solving 2-sat", sat.propagate());
 
-		sat.solve(timeout);
-		sat.propagate();
+			solveXor(sat);
+			writefln("c removed %s variables by solving larger xors", sat.propagate());
+
+			invokeSolver(sat, 1000); // TODO: tweak this number (actually, do something more sophisticated than a number)
+			writefln("c removed %s variables by invoking solver", sat.propagate());
+		}
 
 		writefln("s SATISFIABLE");
 
 		sat.cleanup();
-
 		sat.writeAssignment();
 
 		foreach(ref c; clauses)
