@@ -141,6 +141,9 @@ final class Sat
 
 	Array!Lit renum;		// original -> current. proper refers to current literal, fixed is fixed
 
+	bool varRemoved = false;	// indicated whether a variable/clause was removed since the last run of cleanup()
+	bool clauseRemoved = false;
+
 	/** NOTE: clauseCount is only an estimate */
 	this(int varCount, int clauseCount = 0)
 	{
@@ -158,50 +161,59 @@ final class Sat
 	{
 		assert(prop.empty);
 
-		auto trans = Array!int(varCount, -1); // old roots -> new
-		int k = 0;
-		for(int i = 0; i < varCount; ++i)
-			if(var[i] == Lit.nil)
-				trans[i] = k++;
-
-		for(int i = 0; i < renum.length; ++i)
-			if(renum[i].proper)
-			{
-				auto l = rootLiteral(renum[i]);
-
-				if(l.fixed)
-					renum[i] = l;
-				else
-				{
-					assert(trans[l.var] != -1);
-					renum[i] = Lit(trans[l.var], l.sign);
-				}
-			}
-			else
-				assert(renum[i].fixed);
-
-		foreach(ref c, ref bool rem; &clauses.prune)
+		if(varRemoved)
 		{
-			if(c.length == 0)
-				rem = true;
-			else
+			auto trans = Array!int(varCount, -1); // old roots -> new
+			int k = 0;
+			for(int i = 0; i < varCount; ++i)
+				if(var[i] == Lit.nil)
+					trans[i] = k++;
+
+			for(int i = 0; i < renum.length; ++i)
+				if(renum[i].proper)
+				{
+					auto l = rootLiteral(renum[i]);
+
+					if(l.fixed)
+						renum[i] = l;
+					else
+					{
+						assert(trans[l.var] != -1);
+						renum[i] = Lit(trans[l.var], l.sign);
+					}
+				}
+				else
+					assert(renum[i].fixed);
+
+			foreach(ref c; clauses)
 				foreach(ref l; c)
 				{
 					assert(var[l.var] == Lit.nil);
 					assert(trans[l.var] != -1);
 					l = Lit(trans[l.var], l.sign);
 				}
+
+			var.resize(k);
+			var[] = Lit.nil;
 		}
 
-		var.resize(k);
-		var[] = Lit.nil;
+		if(clauseRemoved || varRemoved)
+		{
+			foreach(ref c, ref bool rem; &clauses.prune)
+				if(c.length == 0)
+					rem = true;
 
-		occs.resize(2*varCount);
-		foreach(ref list; occs)
-			list.resize(0);
-		foreach(int i, ref c; clauses)
-			foreach(l; c)
-				occs[l].pushBack(i);
+
+			occs.resize(2*varCount);
+			foreach(ref list; occs)
+				list.resize(0);
+			foreach(int i, ref c; clauses)
+				foreach(l; c)
+					occs[l].pushBack(i);
+		}
+
+		clauseRemoved = false;
+		varRemoved = false;
 	}
 
 	bool allAssigned() const @property
@@ -313,6 +325,9 @@ final class Sat
 				replaceOcc(i, a.neg, b.neg);
 		}
 
+		if(count)
+			varRemoved = true;
+
 		return count;
 	}
 
@@ -378,6 +393,7 @@ final class Sat
 	void removeClause(int i)
 	{
 		auto c = move(clauses[i]);	// this sets clauses[i].length = 0, i.e. marks it as removed
+		clauseRemoved = true;
 	}
 
 	/** find clause or any subclause. -1 if not found. signs is relative to signs of c */
