@@ -62,7 +62,7 @@ final class ClauseDB
 	Array!(Array!pair) clausesTri;
 
 	Array!(Array!Lit) clausesLong;	// no need for sorting, so don't use Clause
-	Array!(Array!int) occsLong;
+	Array!(Array!int) watches;
 
 	Array!bool assign;
 	Array!Lit stack;
@@ -80,9 +80,9 @@ final class ClauseDB
 		assert(varCount > 0);
 
 		this.varCount = varCount;
-		this.clausesBin.resize(2*varCount);
-		this.clausesTri.resize(2*varCount);
-		this.occsLong.resize(2*varCount);
+		clausesBin.resize(2*varCount);
+		clausesTri.resize(2*varCount);
+		watches.resize(2*varCount);
 		stack.reserve(varCount);
 		level.resize(varCount);
 		assign.resize(2*varCount);
@@ -95,6 +95,7 @@ final class ClauseDB
 	 *    - makes copy of the argument (if applicable, as short clauses are implicit)
 	 *    - does not immediately propagate using the new clause
 	 *    - returns reason appropriate for setting c[0] using the new clause
+	 *    - sets watches on c[0] and c[1], so make sure that is okay
 	 */
 	Reason addClause(Lit[] c)
 	{
@@ -120,8 +121,8 @@ final class ClauseDB
 			default:
 				assert(c.length >= 4);
 				int i = cast(int)clausesLong.length;
-				foreach(x; c)
-					occsLong[x].pushBack(i);
+				watches[c[0]].pushBack(i);
+				watches[c[1]].pushBack(i);
 				clausesLong.pushBack(Array!Lit(c));
 				return Reason(i);
 		}
@@ -206,31 +207,39 @@ final class ClauseDB
 						continue;
 			}
 
-			outer: foreach(i; occsLong[x.neg])
+			outer: foreach(i, ref bool rem; &watches[x.neg].prune)
 			{
-				Lit unit = Lit.nil;
+				auto c = clausesLong[i][];
 
-				foreach(y; clausesLong[i])
+				if(x.neg == c[1])
+					swap(c[0], c[1]);
+
+				assert(x.neg == c[0]);
+
+				if(assign[c[1]])
+					continue outer;
+
+				foreach(ref y; c[2..$])
 				{
-					if(assign[y])
-						continue outer;	// clause satisfied -> do nothing
+					//if(assign[y]) // clause satisfied -> do nothing (TODO: check if this is a good idea)
+					//	continue outer;
 
-					if(assign[y.neg])
-						continue;
-
-					if(unit != Lit.nil)
-						continue outer;	// clause not unit (might also be satisfied) -> do nothing
-
-					unit = y;
+					if(!assign[y.neg]) // literal satisfied or undef -> move watch
+					{
+						swap(c[0], y);
+						watches[c[0]].pushBack(i);
+						rem = true;
+						continue outer;
+					}
 				}
 
-				if(unit == Lit.nil) // clause all false -> conflict
+				if(assign[c[1].neg]) // all literals false -> conflict
 				{
-					conflict = clausesLong[i][0..$];
+					conflict = c;
 					return null;
 				}
 
-				set(unit, Reason(i));
+				set(c[1], Reason(i)); // clause is unit -> propagate it
 			}
 		}
 
