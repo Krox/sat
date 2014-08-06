@@ -134,7 +134,8 @@ struct Clause
 final class Sat
 {
 	Array!Clause clauses;	// length=0 means clause was removed
-	Array!(Array!int) occs;	// can contain removed clauses
+	Array!(Array!int) occList;	// can contain clauses, from which the literal was removed (or the clause itself can be removed)
+	Array!int occListDirty;	// number of removed elements in occList
 	Array!Lit var;			// nil if undef, fixed if fixed, actual literal if equivalence
 	Queue!uint prop;		// propagation queue
 	int varCount() const @property { return cast(int)var.length; }
@@ -148,12 +149,31 @@ final class Sat
 	this(int varCount, int clauseCount = 0)
 	{
 		var.resize(varCount, Lit.nil);
-		occs.resize(2*varCount);
+		occList.resize(2*varCount);
+		occListDirty.resize(2*varCount);
 		clauses.reserve(clauseCount);
 
 		renum.resize(varCount);
 		for(int v = 0; v < varCount; ++v)
 			renum[v] = Lit(v, false);
+	}
+
+	int[] occs(Lit lit)
+	{
+		if(occListDirty[lit]) // of the list is dirty, clean it up before returning it
+		{
+			occListDirty[lit] = 0;
+			foreach(int k, ref bool rem; &occList[lit].prune)
+				rem = (lit !in clauses[k].lits);
+		}
+		return occList[lit][];
+	}
+
+	/** same as occs(lit).length, but faster */
+	size_t occsCount(Lit lit) const
+	{
+		assert(occListDirty[lit] <= occList[lit].length);
+		return occList[lit].length - occListDirty[lit];
 	}
 
 	/** renumber variables and make new occ-lists */
@@ -203,13 +223,14 @@ final class Sat
 				if(c.length == 0)
 					rem = true;
 
-
-			occs.resize(2*varCount);
-			foreach(ref list; occs)
+			occList.resize(2*varCount);
+			foreach(ref list; occList)
 				list.resize(0);
+			occListDirty.resize(2*varCount);
+			occListDirty[] = 0;
 			foreach(int i, ref c; clauses)
 				foreach(l; c)
-					occs[l].pushBack(i);
+					occList[l].pushBack(i);
 		}
 
 		clauseRemoved = false;
@@ -319,10 +340,15 @@ final class Sat
 
 			//writefln("c propagating %s -> %s", a, b);
 
-			foreach(i; move(occs[a]))
+			foreach(i; occs(a))
 				replaceOcc(i, a, b);
-			foreach(i; move(occs[a.neg]))
+			foreach(i; occs(a.neg))
 				replaceOcc(i, a.neg, b.neg);
+
+			occList[a].resize(0);
+			occList[a.neg].resize(0);
+			occListDirty[a] = 0;
+			occListDirty[a.neg] = 0;
 		}
 
 		if(count)
@@ -331,15 +357,18 @@ final class Sat
 		return count;
 	}
 
+	/**
+	 * replace a by b in clause i
+	 *    - a has to be a proper literal
+	 *    - b can be Lit.zero/Lit.one (effectively removes the literal/clause)
+	 */
 	void replaceOcc(int i, Lit a, Lit b)
 	{
 		assert(a.proper);
 		assert(b != Lit.nil);
-
-		if(clauses[i].length == 0)
-			return;
-
 		assert(a in clauses[i].lits);
+
+		occListDirty[a]++;
 
 		if(b == Lit.one)
 			return removeClause(i);
@@ -349,7 +378,7 @@ final class Sat
 
 		if(b != Lit.zero)
 			if(clauses[i].add(b))
-				occs[b].pushBack(i);
+				occList[b].pushBack(i);
 
 		if(clauses[i].length == 1)
 			setLiteral(clauses[i][0]);
@@ -386,13 +415,16 @@ final class Sat
 			return;
 
 		foreach(x; d)
-			occs[x].pushBack(cast(int)clauses.length);
+			occList[x].pushBack(cast(int)clauses.length);
 		clauses.pushBack(move(d));
 	}
 
 	void removeClause(int i)
 	{
-		auto c = move(clauses[i]);	// this sets clauses[i].length = 0, i.e. marks it as removed
+		assert(clauses[i].length != 0);
+		foreach(l; clauses[i])
+			occListDirty[l]++;
+		clauses[i].resize(0);
 		clauseRemoved = true;
 	}
 
@@ -406,8 +438,8 @@ final class Sat
 		buf.reset();
 
 		foreach(i, l; c)
-			foreach(j; occs[Lit(l.var, l.sign != ((signs&(1<<i))!=0))])
-				if(0 < clauses[j].length && clauses[j].length <= c.length)
+			foreach(j; occs(Lit(l.var, l.sign != ((signs&(1<<i))!=0))))
+				if(clauses[j].length <= c.length)
 					if(++buf[j] == clauses[j].length)
 						return j;
 		return -1;
