@@ -12,6 +12,7 @@ static import std.file;
 
 int main(string[] args)
 {
+	string solver = "bin/sat";
 	string cnfFolder = "./sat-2002-beta/submitted";
 	int timeout = 1;
 	bool nocheck = false;
@@ -20,7 +21,8 @@ int main(string[] args)
 	getopt(args,
 		"timeout|t", &timeout,
 		"nocheck|nc", &nocheck,
-		"output|o", &timingFilename);
+		"output|o", &timingFilename,
+		"solver|s", &solver);
 
 	if(args.length == 2)
 		cnfFolder = args[1];
@@ -34,6 +36,7 @@ int main(string[] args)
 	auto files = executeShell("find "~cnfFolder~" -type f").output;
 
 	string[] timing;
+	int nSat, nUnsat, nTimeout;
 
 	foreach(file; splitter(files, "\n"))
 	{
@@ -44,17 +47,19 @@ int main(string[] args)
 		writefln("%s", file);
 		StopWatch sw;
 		sw.start;
-		auto r = executeShell("timeout "~to!string(timeout)~"s /usr/bin/time -f \"%U\" -o timeTmp bin/sat "~file);
+		auto r = executeShell("timeout "~to!string(timeout)~"s /usr/bin/time -f \"%U\" -o timeTmp "~solver~" "~file);
 		sw.stop;
 
 		switch(r.status)
 		{
 			case 10:
 				writefln("\tsolution found");
+				++nSat;
 				break;
 
 			case 20:
 				writefln("\tUNSAT");
+				++nUnsat;
 				if(nocheck == false && executeShell("./cryptominisat "~file).status != 20)
 				{
 					writefln("CHECK FAILED");
@@ -65,6 +70,7 @@ int main(string[] args)
 			case 30:
 			case 124:
 				writefln("\ttimeout");
+				++nTimeout;
 				continue;
 
 			default:
@@ -81,5 +87,8 @@ int main(string[] args)
 		timingFilename = executeShell("date +%F_%R.timing").output.strip;
 	std.file.write(timingFilename, join(timing, "\n")~"\n");
 
+	writefln("");
+	writefln("writing timing to: %s", timingFilename);
+	writefln("%s solutions found / %s unsatisfiable / %s timeout", nSat, nUnsat, nTimeout);
 	return 0;
 }
