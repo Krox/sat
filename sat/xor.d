@@ -135,6 +135,9 @@ final class XorSolver
 					break;
 
 				case 2:
+					if(occ[c[0]].length != 1)
+						swap(c[0],c[1]);
+					assert(occ[c[0]].length == 1); // make sure the removed variable does not appear in any other clause (i.e. it is pivot)
 					sat.setEquivalence(Lit(c[0], false), Lit(c[1], c.rhs));
 					rem = true;
 					break;
