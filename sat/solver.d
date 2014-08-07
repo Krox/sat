@@ -87,7 +87,7 @@ final class Solver
 					return;
 
 				auto conflictClause = db.analyzeConflict();
-				sat.addClause(Array!Lit(conflictClause));
+				sat.addClause(Array!Lit(conflictClause), false);
 
 				if(db.currLevel == 0) // conflict on level 0 -> UNSAT
 					throw new Unsat;

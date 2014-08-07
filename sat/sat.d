@@ -16,10 +16,12 @@ struct Clause
 {
 	FlatSet!Lit lits;
 	alias lits this;
+	bool irred;
 
-	this(Array!Lit lits)
+	this(Array!Lit lits, bool irred)
 	{
 		this.lits = FlatSet!Lit(move(lits));
+		this.irred = irred;
 	}
 
 	uint signs() const @property
@@ -51,14 +53,15 @@ final class Sat
 	Assignment assign;
 	int varCount() const @property { return assign.varCountInner; }
 
-	Array!Clause clauses;	// length=0 means clause was removed
+	Array!Clause clauses;		// length=0 means clause was removed
 	Array!(Array!int) occList;	// can contain clauses, from which the literal was removed (or the clause itself can be removed)
-	Array!int occListDirty;	// number of removed elements in occList
+	Array!int occCountIrred;	// number of removed elements in occList
+	Array!int occCountRed;		// number of removed elements in occList
 
 	static struct Propagation { int v; Lit lit; } // replace variable v by lit (which might be Lit.zero/one)
 	Queue!Propagation prop;		// propagation queue
 
-	bool varRemoved = false;	// indicated whether a variable/clause was removed since the last run of cleanup()
+	bool varRemoved = false;	// indicates whether a variable/clause was removed since the last run of cleanup()
 	bool clauseRemoved = false;
 
 	/** NOTE: clauseCount is only an estimate */
@@ -71,20 +74,18 @@ final class Sat
 
 	int[] occs(Lit lit)
 	{
-		if(occListDirty[lit]) // the list is dirty, clean it up before returning it
-		{
-			occListDirty[lit] = 0;
+		if(occCount(lit) != occList[lit].length) // the list is dirty, clean it up before returning it
 			foreach(int k, ref bool rem; &occList[lit].prune)
 				rem = (lit !in clauses[k].lits);
-		}
+
+		assert(occCount(lit) == occList[lit].length, "corrupt occCount");
 		return occList[lit][];
 	}
 
 	/** same as occs(lit).length, but faster */
-	size_t occsCount(Lit lit) const
+	size_t occCount(Lit lit) const
 	{
-		assert(occListDirty[lit] <= occList[lit].length);
-		return occList[lit].length - occListDirty[lit];
+		return occCountIrred[lit] + occCountRed[lit];
 	}
 
 	void rebuildOccLists()
@@ -92,11 +93,21 @@ final class Sat
 		occList.resize(varCount*2);
 		foreach(ref list; occList)
 			list.resize(0);
+		occCountIrred.resize(varCount*2);
+		occCountRed.resize(varCount*2);
+		occCountIrred[] = 0;
+		occCountRed[] = 0;
+
 		foreach(int i, ref c; clauses)
 			foreach(l; c)
+			{
 				occList[l].pushBack(i);
-		occListDirty.resize(varCount*2);
-		occListDirty[] = 0;
+				if(c.irred)
+					occCountIrred[l]++;
+				else
+					occCountRed[l]++;
+			}
+
 	}
 
 	/** need to call rebuildOccLists() after renumber() */
@@ -116,7 +127,8 @@ final class Sat
 	/** renumber variables and make new occ-lists */
 	void cleanup()
 	{
-		assert(prop.empty);
+		if(propagate())
+			writefln("c WARNING: not fully propagated before cleanup"); // no problem, just a question of style
 
 		if(clauseRemoved)
 			foreach(ref c, ref bool rem; &clauses.prune)
@@ -167,8 +179,7 @@ final class Sat
 
 			occList[a].resize(0);
 			occList[a.neg].resize(0);
-			occListDirty[a] = 0;
-			occListDirty[a.neg] = 0;
+			assert(occCountRed[a] == 0 && occCountIrred[a] == 0 && occCountRed[a.neg] == 0 && occCountIrred[a.neg] == 0);
 		}
 
 		if(count)
@@ -188,17 +199,29 @@ final class Sat
 		assert(b.proper || b.fixed);
 		assert(a in clauses[i].lits);
 
-		occListDirty[a]++;
-
 		if(b == Lit.one)
-			return removeClause(i);
+		{
+			removeClause(i);
+			return;
+		}
+
+		if(clauses[i].irred)
+			occCountIrred[a]--;
+		else
+			occCountRed[a]--;
 
 		if(!clauses[i].remove(a))
 			assert(false, "corrupt occ-list");
 
 		if(b != Lit.zero)
 			if(clauses[i].add(b))
+			{
 				occList[b].pushBack(i);
+				if(clauses[i].irred)
+					occCountIrred[b]++;
+				else
+					occCountRed[b]++;
+			}
 
 		if(clauses[i].length == 1)
 			setLiteral(clauses[i][0]);
@@ -207,7 +230,7 @@ final class Sat
 			removeClause(i);
 	}
 
-	void addClause(Array!Lit c)
+	void addClause(Array!Lit c, bool irred)
 	{
 		foreach(ref l, ref bool rem; &c.prune)
 		{
@@ -222,7 +245,7 @@ final class Sat
 		if(c.length == 0)
 			throw new Unsat;
 
-		auto d = Clause(move(c));
+		auto d = Clause(move(c), irred);
 
 		if(d.length == 1)
 		{
@@ -234,17 +257,38 @@ final class Sat
 			return;
 
 		foreach(x; d)
+		{
 			occList[x].pushBack(cast(int)clauses.length);
+			if(irred)
+				occCountIrred[x]++;
+			else
+				occCountRed[x]++;
+		}
 		clauses.pushBack(move(d));
 	}
 
-	void removeClause(int i)
+	Clause removeClause(int i)
 	{
 		assert(clauses[i].length != 0);
 		foreach(l; clauses[i])
-			occListDirty[l]++;
-		clauses[i].resize(0);
+			if(clauses[i].irred)
+				occCountIrred[l]--;
+			else
+				occCountRed[l]--;
 		clauseRemoved = true;
+		return move(clauses[i]);
+	}
+
+	void makeClauseIrred(int i)
+	{
+		if(clauses[i].irred)
+			return;
+		clauses[i].irred = true;
+		foreach(l; clauses[i])
+		{
+			occCountRed[l]--;
+			occCountIrred[l]++;
+		}
 	}
 
 	/** find clause or any subclause. -1 if not found. signs is relative to signs of c */

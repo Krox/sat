@@ -3,7 +3,7 @@ module sat.main;
 import std.stdio;
 import std.getopt;
 import jive.array;
-import sat.sat, sat.parser, sat.solver, sat.xor, sat.twosat;
+import sat.sat, sat.parser, sat.solver, sat.xor, sat.twosat, sat.subsume;
 
 /**
  * returns:
@@ -34,7 +34,7 @@ int main(string[] args)
 
 		auto sat = new Sat(varCount, cast(int)clauses.length);
 		foreach(ref c; clauses)
-			sat.addClause(c);
+			sat.addClause(c, true);
 
 		writefln("c removed %s variables by unit propagation", sat.propagate());
 
@@ -47,6 +47,8 @@ int main(string[] args)
 
 			solveXor(sat);
 			writefln("c removed %s variables by solving larger xors", sat.propagate());
+
+			simplify(sat);
 
 			invokeSolver(sat, 1000); // TODO: tweak this number (actually, do something more sophisticated than a number)
 			writefln("c removed %s variables by invoking solver", sat.propagate());
