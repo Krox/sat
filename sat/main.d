@@ -38,7 +38,7 @@ int main(string[] args)
 
 		writefln("c removed %s variables by unit propagation", sat.propagate());
 
-		for(int round = 1; !sat.allAssigned; ++round)
+		for(int round = 1; !sat.assign.complete; ++round)
 		{
 			writefln("c =========================== round %s ===========================", round);
 
@@ -54,11 +54,11 @@ int main(string[] args)
 
 		writefln("s SATISFIABLE");
 
-		sat.cleanup();
-		sat.writeAssignment();
+		sat.assign.extend();
+		sat.assign.writeAssignment();
 
 		foreach(ref c; clauses)
-			if(!sat.isSatisfied(c[]))
+			if(!sat.assign.isSatisfiedOuter(c[]))
 				throw new Exception("FINAL TEST FAIL");
 
 		return 10;

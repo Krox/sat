@@ -32,7 +32,7 @@ final class Solver
 	bool failedLiteralProbing(ref Lit branch)
 	{
 		int bestScore = -1;
-		branch = Lit.nil;
+		branch = Lit.undef;
 
 		db.bumpLevel();
 		blocked.reset();
@@ -110,7 +110,7 @@ final class Solver
 						goto handleConflict;
 				}
 			}
-			else if(branch != Lit.nil)
+			else if(branch != Lit.undef)
 			{
 				if(db.propagate(branch, Reason.descision) is null)
 					throw new Exception("cannot happen"); // this would have been detected in failed literal probing

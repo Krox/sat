@@ -1,6 +1,6 @@
 module sat.twosat;
 
-import std.algorithm : min;
+import std.algorithm : min, sort;
 import jive.array;
 import sat.sat;
 
@@ -11,6 +11,7 @@ void solve2sat(Sat sat)
 	Array!uint back;
 	Array!Lit stack;
 	int cnt = 0;
+	Array!Lit comp;
 
 	void dfs(Lit v)
 	{
@@ -37,10 +38,15 @@ void solve2sat(Sat sat)
 		{
 			Lit t = stack.popBack();
 			back[t.toInt] = 999999999;
+			comp.pushBack(t);
 			if(t == v)
 				break;
-			sat.setEquivalence(v, t);
 		}
+		sort(comp[]);
+		if(comp[0].sign == false)
+			foreach(l; comp[1..$])
+				sat.setEquivalence(l, comp[0]);
+		comp.resize(0);
 	}
 
 	g.resize(sat.varCount*2);
