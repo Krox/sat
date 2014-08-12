@@ -54,7 +54,10 @@ struct Reason
 final class ClauseDB
 {
 	const int varCount;	// note: making this unsigned will/has/might lead to bugs
-	int clauseCount;
+	int clauseCountBinary;
+	int clauseCountTernary;
+	int clauseCountLong;
+	int clauseCount() const @property { return clauseCountBinary + clauseCountTernary + clauseCountLong; }
 
 	Array!(Array!Lit) clausesBin;
 
@@ -99,8 +102,6 @@ final class ClauseDB
 	 */
 	Reason addClause(Lit[] c)
 	{
-		++clauseCount;
-
 		switch(c.length)
 		{
 			case 0:
@@ -108,17 +109,20 @@ final class ClauseDB
 				throw new Exception("invalid clause length in solver");
 
 			case 2:
+				++clauseCountBinary;
 				clausesBin[c[0]].pushBack(c[1]);
 				clausesBin[c[1]].pushBack(c[0]);
 				return Reason(c[1]);
 
 			case 3:
+				++clauseCountTernary;
 				clausesTri[c[0]].pushBack(pair(c[1], c[2]));
 				clausesTri[c[1]].pushBack(pair(c[0], c[2]));
 				clausesTri[c[2]].pushBack(pair(c[0], c[1]));
 				return Reason(c[1], c[2]);
 
 			default:
+				++clauseCountLong;
 				assert(c.length >= 4);
 				int i = cast(int)clausesLong.length;
 				watches[c[0]].pushBack(i);

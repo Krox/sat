@@ -4,6 +4,7 @@ import std.stdio;
 import std.getopt;
 import jive.array;
 import sat.sat, sat.parser, sat.solver, sat.xor, sat.twosat, sat.subsume;
+import std.datetime : Clock;
 
 /**
  * returns:
@@ -40,18 +41,24 @@ int main(string[] args)
 
 		for(int round = 1; !sat.assign.complete; ++round)
 		{
-			writefln("c =========================== round %s ===========================", round);
+			auto roundStart = Clock.currAppTick;
+
+			writefln("c ============================== round %s ==============================", round);
 
 			solve2sat(sat);
-			writefln("c removed %s variables by solving 2-sat", sat.propagate());
 
 			solveXor(sat);
-			writefln("c removed %s variables by solving larger xors", sat.propagate());
 
 			simplify(sat);
 
+			auto solverStart = Clock.currAppTick;
+
 			invokeSolver(sat, 1000); // TODO: tweak this number (actually, do something more sophisticated than a number)
-			writefln("c removed %s variables by invoking solver", sat.propagate());
+
+			auto roundEnd = Clock.currAppTick;
+
+			writefln("c used %#.1f s for inprocessing, %#.1f s for solving (total is %#.1f s)",
+				(solverStart-roundStart).msecs/1000.0, (roundEnd-solverStart).msecs/1000.0, roundEnd.msecs/1000.0);
 		}
 
 		writefln("s SATISFIABLE");

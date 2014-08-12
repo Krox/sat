@@ -74,7 +74,7 @@ final class Solver
 	/** throws on UNSAT */
 	void solveSome(int numConflicts)
 	{
-		writefln("c start solver: v=%s c=%s", db.varCount, db.clauseCount);
+		writefln("c start solver with %s vars and %s / %s / %s clauses", db.varCount, db.clauseCountBinary, db.clauseCountTernary, db.clauseCountLong);
 
 		while(true)
 		{
@@ -143,5 +143,8 @@ void invokeSolver(Sat sat, int numConflicts)
 
 	auto solver = new Solver(sat);
 	solver.solveSome(numConflicts);
-	writefln("c stats: %s probes, %s fails (%s %%)", solver.nProbes, solver.nFails, 100*solver.nFails/cast(float)solver.nProbes);
+	int nProps = sat.propagate(); // propagate learnt unit clauses
+
+	writefln("c solver removed %s vars", nProps);
+	writefln("c flp stats: %s probes, %s fails (%#.2f %%)", solver.nProbes, solver.nFails, 100*solver.nFails/cast(float)solver.nProbes);
 }

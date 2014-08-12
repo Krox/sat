@@ -1,5 +1,6 @@
 module sat.twosat;
 
+private import std.stdio;
 import std.algorithm : min, sort;
 import jive.array;
 import sat.sat;
@@ -51,16 +52,16 @@ void solve2sat(Sat sat)
 
 	g.resize(sat.varCount*2);
 
-	bool hasBin = false;
+	int nBins = false;
 	foreach(ref c; sat.clauses)
 		if(c.length == 2)
 		{
-			hasBin = true;
+			++nBins;
 			g[c[0].neg.toInt].pushBack(c[1]);
 			g[c[1].neg.toInt].pushBack(c[0]);
 		}
 
-	if(!hasBin) // early out for problems without binary clauses
+	if(nBins == 0)
 		return;
 
 	back.resize(sat.varCount*2);
@@ -71,4 +72,7 @@ void solve2sat(Sat sat)
 		dfs(Lit(v,false));
 		dfs(Lit(v,true));
 	}
+
+	int nProps = sat.propagate();
+	writefln("c tarjan on %s binary clauses removed %s vars", nBins, nProps);
 }

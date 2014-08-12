@@ -183,7 +183,10 @@ class simplify
 	{
 		auto x = new simplify(sat);
 		x.run();
-		writefln("c simplify removed %s cls, %s lits, %s vars and propagated %s", x.nRemovedClauses, x.nRemovedLiterals, x.nRemovedVariables, x.nProp);
+		if(x.nProp)
+			writefln("c simplify removed %s cls, %s lits and %s+%s vars", x.nRemovedClauses, x.nRemovedLiterals, x.nRemovedVariables, x.nProp);
+		else
+			writefln("c simplify removed %s cls, %s lits and %s vars", x.nRemovedClauses, x.nRemovedLiterals, x.nRemovedVariables);
 	}
 }
 

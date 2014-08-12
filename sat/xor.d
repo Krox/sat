@@ -13,8 +13,13 @@ void solveXor(Sat sat)
 	finder.search();
 	if(finder.clauses.length == 0)
 		return;
+	auto nClauses = finder.clauses.length;
+
 	finder.gauss();
 	finder.implement();
+	int nProps = sat.propagate();
+
+	writefln("c gauss on %s xor clauses removed %s vars", nClauses, nProps);
 }
 
 struct XorClause
@@ -84,8 +89,6 @@ final class XorSolver
 	/** do Gaussian elimination */
 	void gauss()
 	{
-		writefln("c gaussing %s xors", clauses.length);
-
 		for(int i = 0; i < clauses.length; ++i)
 		{
 			if(clauses[i].length == 0)
