@@ -23,10 +23,7 @@ final class Solver
 		this.sat = sat;
 		blocked.resize(sat.varCount*2);
 
-		db = new ClauseDB(sat.varCount);
-		foreach(ci, ref c; sat.clauses)
-			if(c.length)
-				db.addClause(c[]);
+		db = new ClauseDB(sat);
 	}
 
 	bool failedLiteralProbing(ref Lit branch)
@@ -74,7 +71,7 @@ final class Solver
 	/** throws on UNSAT */
 	void solveSome(int numConflicts)
 	{
-		writefln("c start solver with %s vars and %s / %s / %s clauses", db.varCount, db.clauseCountBinary, db.clauseCountTernary, db.clauseCountLong);
+		writefln("c start solver with %s vars and ?? / %s / %s clauses", db.varCount, /+db.clauseCountBinary,+/ db.clauseCountTernary, db.clauseCountLong);
 
 		while(true)
 		{
@@ -96,14 +93,19 @@ final class Solver
 
 				if(conflictClause.length == 1)
 				{
-					//writefln("found unit: %s", conflictClause[0]);
 					db.unrollLevel(0);
 					if(db.propagate(conflictClause[0], Reason.unit) is null)
 						throw new Unsat;
 				}
+				else if(conflictClause.length == 2)
+				{
+					// NOTE: don't add the clause to db explicitly
+					db.unrollLevel(db.level[conflictClause[1].var]);
+					if(db.propagate(conflictClause[0], Reason(conflictClause[1])) is null)
+						goto handleConflict;
+				}
 				else
 				{
-					//writefln("non-unit conflict                  =======");
 					db.unrollLevel(db.level[conflictClause[1].var]);
 					auto reason = db.addClause(conflictClause);
 					if(db.propagate(conflictClause[0], reason) is null)

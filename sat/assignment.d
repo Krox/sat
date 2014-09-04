@@ -15,7 +15,7 @@ struct Lit
 		toInt = (v<<1) | s;
 	}
 
-	private this(uint i)
+	this(uint i)
 	{
 		toInt = i;
 	}

@@ -7,24 +7,26 @@ import sat.sat;
 
 void solve2sat(Sat sat)
 {
-	Array!(Array!Lit) g;
 	Array!bool visited;
 	Array!uint back;
 	Array!Lit stack;
 	int cnt = 0;
 	Array!Lit comp;
+	int nBins = 0;
 
 	void dfs(Lit v)
 	{
 		if(visited[v.toInt])
 			return;
 		visited[v.toInt] = true;
+
 		int x = back[v.toInt] = cnt++;
 
 		stack.pushBack(v);
 
-		foreach(w; g[v.toInt])
+		foreach(w; sat.bins(v.neg))
 		{
+			++nBins;
 			dfs(w);
 			x = min(x, back[w.toInt]);
 		}
@@ -43,6 +45,7 @@ void solve2sat(Sat sat)
 			if(t == v)
 				break;
 		}
+
 		sort(comp[]);
 		if(comp[0].sign == false)
 			foreach(l; comp[1..$])
@@ -50,19 +53,6 @@ void solve2sat(Sat sat)
 		comp.resize(0);
 	}
 
-	g.resize(sat.varCount*2);
-
-	int nBins = false;
-	foreach(ref c; sat.clauses)
-		if(c.length == 2)
-		{
-			++nBins;
-			g[c[0].neg.toInt].pushBack(c[1]);
-			g[c[1].neg.toInt].pushBack(c[0]);
-		}
-
-	if(nBins == 0)
-		return;
 
 	back.resize(sat.varCount*2);
 	visited.resize(sat.varCount*2);
@@ -74,5 +64,5 @@ void solve2sat(Sat sat)
 	}
 
 	int nProps = sat.propagate();
-	writefln("c tarjan on %s binary clauses removed %s vars", nBins, nProps);
+	writefln("c tarjan on %s binary clauses removed %s vars", nBins/2, nProps);
 }

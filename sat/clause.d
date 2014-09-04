@@ -53,13 +53,13 @@ struct Reason
 
 final class ClauseDB
 {
-	const int varCount;	// note: making this unsigned will/has/might lead to bugs
-	int clauseCountBinary;
+	Sat sat;
+	int varCount() const @property { return sat.varCount; }
+
+	//int clauseCountBinary;
 	int clauseCountTernary;
 	int clauseCountLong;
-	int clauseCount() const @property { return clauseCountBinary + clauseCountTernary + clauseCountLong; }
-
-	Array!(Array!Lit) clausesBin;
+	//int clauseCount() const @property { return clauseCountBinary + clauseCountTernary + clauseCountLong; }
 
 	static struct pair { Lit a,b; }
 	Array!(Array!pair) clausesTri;
@@ -78,12 +78,11 @@ final class ClauseDB
 	Lit[3] _conflict;
 	private LazyBitArray seen;
 
-	this(int varCount)
+	this(Sat sat)
 	{
+		this.sat = sat;
 		assert(varCount > 0);
 
-		this.varCount = varCount;
-		clausesBin.resize(2*varCount);
 		clausesTri.resize(2*varCount);
 		watches.resize(2*varCount);
 		stack.reserve(varCount);
@@ -91,6 +90,10 @@ final class ClauseDB
 		assign.resize(2*varCount);
 		reason.resize(varCount);
 		seen.resize(varCount);
+
+		foreach(ci, ref c; sat.clauses)
+			if(c.length)
+				addClause(c[]);
 	}
 
 	/**
@@ -106,13 +109,8 @@ final class ClauseDB
 		{
 			case 0:
 			case 1:
+			case 2: // binary clauses should be put into sat directy
 				throw new Exception("invalid clause length in solver");
-
-			case 2:
-				++clauseCountBinary;
-				clausesBin[c[0]].pushBack(c[1]);
-				clausesBin[c[1]].pushBack(c[0]);
-				return Reason(c[1]);
 
 			case 3:
 				++clauseCountTernary;
@@ -172,7 +170,7 @@ final class ClauseDB
 		{
 			auto x = stack[pos++];
 
-			foreach(Lit y; clausesBin[x.neg])
+			foreach(Lit y; sat.bins(x.neg))
 			{
 				if(assign[y])
 					continue;

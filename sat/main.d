@@ -3,7 +3,7 @@ module sat.main;
 import std.stdio;
 import std.getopt;
 import jive.array;
-import sat.sat, sat.parser, sat.solver, sat.xor, sat.twosat, sat.subsume;
+import sat.sat, sat.parser, sat.solver, sat.xor, sat.twosat;
 import std.datetime : Clock;
 
 /**
@@ -48,8 +48,6 @@ int main(string[] args)
 			solve2sat(sat);
 
 			solveXor(sat);
-
-			simplify(sat);
 
 			auto solverStart = Clock.currAppTick;
 
