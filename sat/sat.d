@@ -61,7 +61,7 @@ final class Sat
 	private Array!(Array!Lit) binaryClauses;	// binary clauses. NOTE: can sometimes be asymmetric
 	private Array!bool binaryDirty;		// indicates that a binary-list may contain removed/fixed variables
 
-	static struct Propagation { int v; Lit lit; } // replace variable v by lit (which might be Lit.zero/one)
+	static struct Propagation { Lit a; Lit b; } // replace literal a with b (a is proper, b can be proper or Lit.one)
 	Queue!Propagation prop;		// propagation queue
 
 	bool varRemoved = false;	// indicates whether a variable/clause was removed since the last run of cleanup()
@@ -179,19 +179,12 @@ final class Sat
 		varRemoved = false;
 	}
 
-	void setLiteral(Lit l)
-	{
-		if(!assign.setLiteralInner(l))
-			return;
-		prop.push(Propagation(l.var, Lit.one^l.sign));
-	}
-
 	/** replace a by b */
 	void setEquivalence(Lit a, Lit b)
 	{
 		assert(a.proper && b.proper);
 		assign.setEquivalenceInner(a, b);
-		prop.push(Propagation(a.var, b^a.sign));
+		prop.push(Propagation(a, b));
 	}
 
 	/** returns number of vars propagated */
@@ -203,44 +196,46 @@ final class Sat
 		{
 			++count;
 			auto p = prop.pop();
-			auto a = Lit(p.v, false);
-			auto b = p.lit;
 
-			assert(assign.valueInner(a) != Lit.undef);
+			assert(assign.valueInner(p.a) != Lit.undef, "tried to propagate a variable that is already fixed/eliminated");
 
-			if(b == Lit.one)
-				foreach(lit; bins(a.neg))
-					setLiteral(lit);
-			else if(b == Lit.zero)
-				foreach(lit; bins(a))
-					setLiteral(lit);
-			else
+			if(p.b == Lit.one) // fix literal p.a
 			{
-				assert(b.proper);
-				foreach(lit; bins(a))
-					addBinary(b, lit);
-				foreach(lit; bins(a.neg))
-					addBinary(b.neg, lit);
+				foreach(lit; bins(p.a.neg))
+					addUnary(lit);
+
+				foreach(k; occs(p.a))
+					removeClause(k);
+				foreach(k; occs(p.a.neg))
+					removeLiteral(k, p.a.neg);
+			}
+			else // replace literal p.a with p.b
+			{
+				assert(p.b.proper);
+
+				foreach(lit; bins(p.a))
+					addBinary(p.b, lit);
+				foreach(lit; bins(p.a.neg))
+					addBinary(p.b.neg, lit);
+
+				foreach(i; occs(p.a))
+					replaceLiteral(i, p.a, p.b);
+				foreach(i; occs(p.a.neg))
+					replaceLiteral(i, p.a.neg, p.b.neg);
 			}
 
-			foreach(lit; bins(a))
+			assert(occs(p.a).length == 0);
+			assert(occs(p.a.neg).length == 0);
+
+			foreach(lit; bins(p.a))
 				binaryDirty[lit] = true;
-			foreach(lit; bins(a.neg))
+			foreach(lit; bins(p.a.neg))
 				binaryDirty[lit] = true;
 
-			binaryClauses[a].resize(0);
-			binaryClauses[a.neg].resize(0);
-			binaryDirty[a] = false;
-			binaryDirty[a.neg] = false;
-
-			foreach(i; occs(a))
-				replaceOcc(i, a, b);
-			foreach(i; occs(a.neg))
-				replaceOcc(i, a.neg, b.neg);
-
-			occList[a].resize(0);
-			occList[a.neg].resize(0);
-			assert(occCountRed[a] == 0 && occCountIrred[a] == 0 && occCountRed[a.neg] == 0 && occCountIrred[a.neg] == 0);
+			binaryClauses[p.a].resize(0);
+			binaryClauses[p.a.neg].resize(0);
+			binaryDirty[p.a] = false;
+			binaryDirty[p.a.neg] = false;
 		}
 
 		if(count)
@@ -249,58 +244,71 @@ final class Sat
 		return count;
 	}
 
-	/**
-	 * replace a by b in clause i
-	 *    - a has to be a proper literal
-	 *    - b can be Lit.zero/Lit.one (effectively removes the literal/clause)
-	 */
-	void replaceOcc(int i, Lit a, Lit b)
+	/** add literal a to clause i */
+	void addLiteral(int i, Lit a)
 	{
 		assert(a.proper);
-		assert(b.proper || b.fixed);
-		assert(a in clauses[i].lits);
+		assert(clauses[i].length);
 
-		if(b == Lit.one || b.neg in clauses[i].lits) // clause becomes satisfied or tautological -> just remove it
+		if(a.neg in clauses[i].lits) // tautology -> remove clause
 		{
 			removeClause(i);
 			return;
 		}
+
+		if(clauses[i].add(a))
+		{
+			occList[a].pushBack(i);
+			if(clauses[i].irred)
+				occCountIrred[a]++;
+			else
+				occCountRed[a]++;
+		}
+
+		assert(!clauses[i].tautological);
+	}
+
+	/** remove literal a from clause i */
+	void removeLiteral(int i, Lit a)
+	{
+		if(!clauses[i].remove(a))
+			assert(false, "literal to be deleted was not found");
 
 		if(clauses[i].irred)
 			occCountIrred[a]--;
 		else
 			occCountRed[a]--;
 
-		if(!clauses[i].remove(a))
-			assert(false, "corrupt occ-list");
-
-		if(b != Lit.zero)
-			if(clauses[i].add(b))
-			{
-				occList[b].pushBack(i);
-				if(clauses[i].irred)
-					occCountIrred[b]++;
-				else
-					occCountRed[b]++;
-			}
-
-		assert(!clauses[i].tautological);
-
-		if(clauses[i].length == 1)
-			setLiteral(clauses[i][0]);
-
 		if(clauses[i].length == 2)
 		{
 			addBinary(clauses[i][0], clauses[i][1]);
 			removeClause(i);
 		}
+		else assert(clauses[i].length > 2);
+	}
+
+	/** replace a by b in clause i (both a and b have to be proper literals) */
+	void replaceLiteral(int i, Lit a, Lit b)
+	{
+		assert(a.var != b.var);
+		addLiteral(i, b);
+		if(clauses[i].length) // clause might have become tautological
+			removeLiteral(i, a);
+	}
+
+	/** add a unary clause, i.e. fix a literal */
+	void addUnary(Lit l)
+	{
+		if(!assign.setLiteralInner(l))
+			return;
+		prop.push(Propagation(l, Lit.one));
 	}
 
 	/** add a binary clause */
 	void addBinary(Lit a, Lit b)
 	{
 		if(a == b)
-			return setLiteral(a);
+			return addUnary(a);
 		else if(a == b.neg)
 			return;
 
@@ -308,17 +316,11 @@ final class Sat
 		binaryClauses[b].pushBack(a);
 	}
 
+	/** add clause of arbitrary length */
 	void addClause(Array!Lit c, bool irred)
 	{
 		foreach(ref l, ref bool rem; &c.prune)
-		{
-			if(l == Lit.one)
-				return;
-			else if(l == Lit.zero)
-				rem = true;
-			else
-				assert(l.proper);
-		}
+			assert(l.proper);
 
 		if(c.length == 0)
 			throw new Unsat;
@@ -326,16 +328,13 @@ final class Sat
 		auto d = Clause(move(c), irred);
 
 		if(d.length == 1)
-		{
-			setLiteral(d[0]);
-			return;
-		}
-
-		if(d.tautological)
-			return;
+			return addUnary(d[0]);
 
 		if(d.length == 2)
 			return addBinary(d[0], d[1]);
+
+		if(d.tautological)
+			return;
 
 		foreach(x; d)
 		{
@@ -348,6 +347,7 @@ final class Sat
 		clauses.pushBack(move(d));
 	}
 
+	/** remove clause i */
 	Clause removeClause(int i)
 	{
 		assert(clauses[i].length != 0);
@@ -360,6 +360,7 @@ final class Sat
 		return move(clauses[i]);
 	}
 
+	/** mark clause i as irreducible */
 	void makeClauseIrred(int i)
 	{
 		if(clauses[i].irred)

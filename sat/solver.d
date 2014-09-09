@@ -122,9 +122,9 @@ final class Solver
 				for(int v = 0; v < db.varCount; ++v)
 				{
 					if(db.assign[Lit(v, false)])
-						sat.setLiteral(Lit(v, false));
+						sat.addUnary(Lit(v, false));
 					else if(db.assign[Lit(v, true)])
-						sat.setLiteral(Lit(v, true));
+						sat.addUnary(Lit(v, true));
 					else assert(false);
 				}
 

@@ -133,7 +133,7 @@ final class XorSolver
 					break;
 
 				case 1:
-					sat.setLiteral(Lit(c[0], !c.rhs));
+					sat.addUnary(Lit(c[0], !c.rhs));
 					rem = true;
 					break;
 
