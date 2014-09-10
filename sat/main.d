@@ -3,7 +3,7 @@ module sat.main;
 import std.stdio;
 import std.getopt;
 import jive.array;
-import sat.sat, sat.parser, sat.solver, sat.xor, sat.twosat;
+import sat.sat, sat.parser, sat.solver, sat.xor, sat.twosat, sat.simplify;
 import std.datetime : Clock;
 
 /**
@@ -44,6 +44,10 @@ int main(string[] args)
 			auto roundStart = Clock.currAppTick;
 
 			writefln("c ============================== round %s ==============================", round);
+
+			solve2sat(sat);
+
+			simplify(sat);
 
 			solve2sat(sat);
 

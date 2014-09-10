@@ -5,7 +5,7 @@ import jive.lazyarray;
 import jive.queue;
 import jive.flatset;
 private import std.stdio;
-private import std.algorithm : move, min, max;
+private import std.algorithm : move, min, max, sort;
 private import std.array : join;
 private import std.conv : to;
 private import std.range : map;
@@ -54,7 +54,7 @@ final class Sat
 	int varCount() const @property { return assign.varCountInner; }
 
 	Array!Clause clauses;		// length=0 means clause was removed
-	Array!(Array!int) occList;	// can contain clauses, from which the literal was removed (or the clause itself can be removed)
+	private Array!(Array!int) occList;	// can contain clauses from which the literal was removed (or the clause itself can be removed). Also duplicates are possible.
 	Array!int occCountIrred;
 	Array!int occCountRed;
 
@@ -80,10 +80,17 @@ final class Sat
 	int[] occs(Lit lit)
 	{
 		if(occCount(lit) != occList[lit].length) // the list is dirty, clean it up before returning it
+		{
+			sort(occList[lit][]);
+			int last = -1;
 			foreach(int k, ref bool rem; &occList[lit].prune)
-				rem = (lit !in clauses[k].lits);
+			{
+				rem = (lit !in clauses[k].lits) || (k == last);
+				last = k;
+			}
+		}
 
-		assert(occCount(lit) == occList[lit].length, "corrupt occCount");
+		assert(occCount(lit) == occList[lit].length, "corrupt occCount. lit = "~to!string(lit));
 		return occList[lit][];
 	}
 
@@ -377,18 +384,39 @@ final class Sat
 	// TODO: enable it to find binary clauses
 	int findClause(const ref Clause c, uint signs = 0)
 	{
+		assert(prop.empty);
 		static LazyArray!ubyte buf;
-		assert(c.length <= 256);
+		assert(c.length <= 32);
 
 		buf.resize(clauses.length);
 		buf.reset();
 
 		foreach(i, l; c)
-			foreach(j; occs(Lit(l.var, l.sign != ((signs&(1<<i))!=0))))
+			foreach(j; occs(l^((signs&(1<<i))!=0)))
 				if(clauses[j].length <= c.length)
 					if(++buf[j] == clauses[j].length)
 						return j;
 		return -1;
+	}
+
+	/** check consitency of occ-lists. for debugging */
+	void check()
+	{
+		assert(prop.empty);
+
+		size_t count = 0;
+		for(int i = 0; i < varCount*2; ++i)
+		{
+			foreach(k; occs(Lit(i)))
+				assert(Lit(i) in clauses[k].lits);
+
+			count += occs(Lit(i)).length;
+		}
+
+		foreach(ref c; clauses)
+			count -= c.length;
+		assert(count == 0);
+		writefln("c check okay");
 	}
 
 	void dump()
