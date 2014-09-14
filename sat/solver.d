@@ -75,8 +75,24 @@ final class Solver
 
 		while(true)
 		{
-			Lit branch;
-			if(!failedLiteralProbing(branch))
+			int branch = db.mostActiveVariable;
+
+			if(branch == -1)
+			{
+				for(int v = 0; v < db.varCount; ++v)
+				{
+					if(db.assign[Lit(v, false)])
+						sat.addUnary(Lit(v, false));
+					else if(db.assign[Lit(v, true)])
+						sat.addUnary(Lit(v, true));
+					else assert(false);
+				}
+
+				return;
+			}
+
+			db.bumpLevel();
+			if(db.propagate(Lit(branch, false), Reason.descision) is null)
 			{
 				handleConflict:
 
@@ -112,24 +128,6 @@ final class Solver
 						goto handleConflict;
 				}
 			}
-			else if(branch != Lit.undef)
-			{
-				if(db.propagate(branch, Reason.descision) is null)
-					throw new Exception("cannot happen"); // this would have been detected in failed literal probing
-			}
-			else
-			{
-				for(int v = 0; v < db.varCount; ++v)
-				{
-					if(db.assign[Lit(v, false)])
-						sat.addUnary(Lit(v, false));
-					else if(db.assign[Lit(v, true)])
-						sat.addUnary(Lit(v, true));
-					else assert(false);
-				}
-
-				return;
-			}
 		}
 
 		assert(false);
@@ -148,5 +146,5 @@ void invokeSolver(Sat sat, int numConflicts)
 	int nProps = sat.propagate(); // propagate learnt unit clauses
 
 	writefln("c solver removed %s vars", nProps);
-	writefln("c flp stats: %s probes, %s fails (%#.2f %%)", solver.nProbes, solver.nFails, 100*solver.nFails/cast(float)solver.nProbes);
+	//writefln("c flp stats: %s probes, %s fails (%#.2f %%)", solver.nProbes, solver.nFails, 100*solver.nFails/cast(float)solver.nProbes);
 }

@@ -78,6 +78,9 @@ final class ClauseDB
 	Lit[3] _conflict;
 	private LazyBitArray seen;
 
+	private Array!double activity;
+	private double activityInc = 1;
+
 	this(Sat sat)
 	{
 		this.sat = sat;
@@ -90,6 +93,7 @@ final class ClauseDB
 		assign.resize(2*varCount);
 		reason.resize(varCount);
 		seen.resize(varCount);
+		activity.resize(varCount, 0);
 
 		foreach(ci, ref c; sat.clauses)
 			if(c.length)
@@ -270,6 +274,8 @@ final class ClauseDB
 				return;
 			seen[lit.var] = true;
 
+			bumpVariableActivity(lit.var);
+
 			if(level[lit.var] < currLevel) // reason side
 				buf.pushBack(lit);
 			else // conflict side (includes the UIP itself)
@@ -326,6 +332,7 @@ final class ClauseDB
 		}
 
 		conflict = null;
+		decayVariableActivity();
 		return buf[];
 	}
 
@@ -344,5 +351,31 @@ final class ClauseDB
 		while(stack.length > savePoint[l])
 			assign[stack.popBack] = false;
 		savePoint.resize(l);
+	}
+
+	void bumpVariableActivity(int v)
+	{
+		activity[v] += activityInc;
+	}
+
+	void decayVariableActivity()
+	{
+		activityInc *= 1.01;
+		if(activityInc > 1e100)
+		{
+			activityInc /= 1e100;
+			activity[][] /= 1e100;
+		}
+	}
+
+	/** most active undefined variable. -1 if everything is assigned */
+	int mostActiveVariable() const
+	{
+		int best = -1;
+		for(int v = 0; v < varCount; ++v)
+			if(!assign[Lit(v, false)] && !assign[Lit(v, true)])
+				if(best == -1 || activity[v] > activity[best])
+					best = v;
+		return best;
 	}
 }
