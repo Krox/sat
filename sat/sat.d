@@ -60,6 +60,8 @@ final class Sat
 
 	private Array!(Array!Lit) binaryClauses;	// binary clauses. NOTE: can sometimes be asymmetric
 	private Array!bool binaryDirty;		// indicates that a binary-list may contain removed/fixed variables
+	Array!bool binaryNew;	// indicates that there are new binary clauses, on which tarjan has not run yet
+	bool binaryAnyNew = false;
 
 	static struct Propagation { Lit a; Lit b; } // replace literal a with b (a is proper, b can be proper or Lit.one)
 	Queue!Propagation prop;		// propagation queue
@@ -75,6 +77,7 @@ final class Sat
 		rebuildOccLists();
 		binaryClauses.resize(varCount*2);
 		binaryDirty.resize(varCount*2);
+		binaryNew.resize(varCount*2);
 	}
 
 	int[] occs(Lit lit)
@@ -321,6 +324,9 @@ final class Sat
 
 		binaryClauses[a].pushBack(b);
 		binaryClauses[b].pushBack(a);
+		binaryNew[a] = true;
+		binaryNew[b] = true;
+		binaryAnyNew = true;
 	}
 
 	/** add clause of arbitrary length */

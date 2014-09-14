@@ -5,20 +5,22 @@ import std.algorithm : min, sort;
 import jive.array;
 import sat.sat;
 
-void solve2sat(Sat sat)
+class solve2sat
 {
-	Array!bool visited;
-	Array!uint back;
-	Array!Lit stack;
-	int cnt = 0;
-	Array!Lit comp;
-	int nBins = 0;
+	private Sat sat;
+	private Array!bool visited;
+	private Array!uint back;
+	private Array!Lit stack;
+	private int cnt = 0;
+	private Array!Lit comp;
+	private int nProps = 0;
 
-	void dfs(Lit v)
+	private void dfs(Lit v)
 	{
 		if(visited[v.toInt])
 			return;
 		visited[v.toInt] = true;
+		sat.binaryNew[v.neg.toInt] = false;
 
 		int x = back[v.toInt] = cnt++;
 
@@ -26,7 +28,6 @@ void solve2sat(Sat sat)
 
 		foreach(w; sat.bins(v.neg))
 		{
-			++nBins;
 			dfs(w);
 			x = min(x, back[w.toInt]);
 		}
@@ -53,16 +54,41 @@ void solve2sat(Sat sat)
 		comp.resize(0);
 	}
 
-
-	back.resize(sat.varCount*2);
-	visited.resize(sat.varCount*2);
-
-	for(int v = 0; v < sat.varCount; ++v)
+	private void run()
 	{
-		dfs(Lit(v,false));
-		dfs(Lit(v,true));
+		cnt = 0;
+		assert(comp.empty);
+		assert(stack.empty);
+		back.assign(sat.varCount*2, 0);
+		visited.assign(sat.varCount*2, false);
+
+		for(int v = 0; v < sat.varCount; ++v)
+		{
+			if(sat.binaryNew[Lit(v, true)])
+				dfs(Lit(v,false));
+			if(sat.binaryNew[Lit(v, false)])
+				dfs(Lit(v,true));
+		}
+
+		sat.binaryAnyNew = false;
+		nProps += sat.propagate();
 	}
 
-	int nProps = sat.propagate();
-	writefln("c tarjan on %s binary clauses removed %s vars", nBins/2, nProps);
+	private this(Sat sat)
+	{
+		this.sat = sat;
+	}
+
+	static void opCall(Sat sat)
+	{
+		if(!sat.binaryAnyNew)
+			return;
+
+		auto x = new solve2sat(sat);
+		while(sat.binaryAnyNew)
+			x.run();
+
+		if(x.nProps)
+			writefln("c tarjan removed %s vars", x.nProps);
+	}
 }
