@@ -2,15 +2,16 @@ module sat.solver;
 
 import std.stdio;
 import std.datetime : Clock;
+
 import jive.array;
 import jive.lazyarray;
-import sat.sat, sat.clause;
 
-
+import sat.sat;
+import sat.propengine;
 
 final class Solver
 {
-	ClauseDB db;
+	PropEngine engine;
 	Sat sat;
 	LazyBitArray blocked;
 	Lit probe = Lit(0, false);
@@ -23,7 +24,7 @@ final class Solver
 		this.sat = sat;
 		blocked.resize(sat.varCount*2);
 
-		db = new ClauseDB(sat);
+		engine = new PropEngine(sat);
 	}
 
 	bool failedLiteralProbing(ref Lit branch)
@@ -31,17 +32,17 @@ final class Solver
 		int bestScore = -1;
 		branch = Lit.undef;
 
-		db.bumpLevel();
+		engine.bumpLevel();
 		blocked.reset();
 
 		auto stop = probe;
 
 		do // TODO: do in in non-arbitrary order to better exploit dominating literals
 		{
-			if(!db.assign[probe] && !db.assign[probe.neg] && !blocked[probe])
+			if(!engine.assign[probe] && !engine.assign[probe.neg] && !blocked[probe])
 			{
 				++nProbes;
-				auto r = db.propagate(probe, Reason.descision);
+				auto r = engine.propagate(probe, Reason.descision);
 
 				if(r is null) // there was a conflict
 				{
@@ -53,7 +54,7 @@ final class Solver
 					blocked[x] = true;
 
 				int score = cast(int)r.length;
-				db.unrollCurrLevel();
+				engine.unrollCurrLevel();
 
 				if(score > bestScore)
 				{
@@ -61,7 +62,7 @@ final class Solver
 					branch = probe;
 				}
 			}
-			probe.toInt = (probe.toInt+1)%(db.varCount*2);
+			probe.toInt = (probe.toInt+1)%(sat.varCount*2);
 		}
 		while(probe != stop);
 
@@ -71,19 +72,24 @@ final class Solver
 	/** throws on UNSAT */
 	void solveSome(int numConflicts)
 	{
-		writefln("c start solver with %s vars and ?? / %s / %s clauses", db.varCount, /+db.clauseCountBinary,+/ db.clauseCountTernary, db.clauseCountLong);
+		size_t binCount = 0;
+		for(int i = 0; i < sat.varCount*2; ++i)
+			binCount += sat.bins(Lit(i)).length;
+		binCount /= 2;
+
+		writefln("c start solver with %s vars and %s / %s / %s clauses", engine.varCount, binCount, engine.clauseCountTernary, engine.clauseCountLong);
 
 		while(true)
 		{
-			int branch = db.mostActiveVariable;
+			int branch = engine.mostActiveVariable;
 
 			if(branch == -1)
 			{
-				for(int v = 0; v < db.varCount; ++v)
+				for(int v = 0; v < engine.varCount; ++v)
 				{
-					if(db.assign[Lit(v, false)])
+					if(engine.assign[Lit(v, false)])
 						sat.addUnary(Lit(v, false));
-					else if(db.assign[Lit(v, true)])
+					else if(engine.assign[Lit(v, true)])
 						sat.addUnary(Lit(v, true));
 					else assert(false);
 				}
@@ -91,40 +97,40 @@ final class Solver
 				return;
 			}
 
-			db.bumpLevel();
-			if(db.propagate(Lit(branch, false), Reason.descision) is null)
+			engine.bumpLevel();
+			if(engine.propagate(Lit(branch, false), Reason.descision) is null)
 			{
 				handleConflict:
 
 				if(numConflicts-- == 0)
 					return;
 
-				auto conflictClause = db.analyzeConflict();
+				auto conflictClause = engine.analyzeConflict();
 				sat.addClause(Array!Lit(conflictClause), false);
 
-				if(db.currLevel == 0) // conflict on level 0 -> UNSAT
+				if(engine.currLevel == 0) // conflict on level 0 -> UNSAT
 					throw new Unsat;
 
 				//writefln("conflict: %s", conflictClause[]);
 
 				if(conflictClause.length == 1)
 				{
-					db.unrollLevel(0);
-					if(db.propagate(conflictClause[0], Reason.unit) is null)
+					engine.unrollLevel(0);
+					if(engine.propagate(conflictClause[0], Reason.unit) is null)
 						throw new Unsat;
 				}
 				else if(conflictClause.length == 2)
 				{
 					// NOTE: don't add the clause to db explicitly
-					db.unrollLevel(db.level[conflictClause[1].var]);
-					if(db.propagate(conflictClause[0], Reason(conflictClause[1])) is null)
+					engine.unrollLevel(engine.level[conflictClause[1].var]);
+					if(engine.propagate(conflictClause[0], Reason(conflictClause[1])) is null)
 						goto handleConflict;
 				}
 				else
 				{
-					db.unrollLevel(db.level[conflictClause[1].var]);
-					auto reason = db.addClause(conflictClause);
-					if(db.propagate(conflictClause[0], reason) is null)
+					engine.unrollLevel(engine.level[conflictClause[1].var]);
+					auto reason = engine.addClause(conflictClause);
+					if(engine.propagate(conflictClause[0], reason) is null)
 						goto handleConflict;
 				}
 			}

@@ -1,4 +1,8 @@
-module sat.clause;
+module sat.propengine;
+
+/**
+ * unit propagation, backtracking, conflict analysis
+ */
 
 import jive.array;
 import jive.lazyarray;
@@ -51,7 +55,7 @@ struct Reason
 	}
 }
 
-final class ClauseDB
+final class PropEngine
 {
 	Sat sat;
 	int varCount() const @property { return sat.varCount; }
