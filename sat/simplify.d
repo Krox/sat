@@ -7,6 +7,7 @@ import jive.array;
 import jive.lazyarray;
 
 import sat.sat;
+import sat.stats;
 
 /** subsumption and self-subsuming resolution */
 class simplify
@@ -24,14 +25,18 @@ class simplify
 
 	void run()
 	{
+		swSubsumeBinary.start();
 		for(int i = 0; i < sat.varCount*2; ++i)
 			binarySubsume(Lit(i));
+		sat.propagate();
+		swSubsumeBinary.stop();
 
+		swSubsume.start();
 		foreach(int i, ref c; sat.clauses)
 			if(c.length)
 				subsume(i, sat.clauses[i]);
-
 		sat.propagate();
+		swSubsume.stop();
 	}
 
 	/** perform subsumption and self-subsuming resolution using implications a -> * (also find failed literals) */

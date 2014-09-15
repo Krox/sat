@@ -1,14 +1,21 @@
 module sat.xor;
 
-import jive.array;
-import jive.flatset;
 private import core.bitop : popcnt;
 private import std.stdio;
 private import std.range;
+
+import jive.array;
+import jive.flatset;
+
 import sat.sat;
+import sat.stats;
 
 void solveXor(Sat sat)
 {
+	swXor.start();
+	scope(exit)
+		swXor.stop();
+
 	auto finder = new XorSolver(sat);
 	finder.search();
 	if(finder.clauses.length == 0)

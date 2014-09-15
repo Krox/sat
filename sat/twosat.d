@@ -4,6 +4,7 @@ private import std.stdio;
 import std.algorithm : min, sort;
 import jive.array;
 import sat.sat;
+import sat.stats;
 
 class solve2sat
 {
@@ -81,6 +82,10 @@ class solve2sat
 
 	static void opCall(Sat sat)
 	{
+		swTarjan.start();
+		scope(exit)
+			swTarjan.stop();
+
 		if(!sat.binaryAnyNew)
 			return;
 

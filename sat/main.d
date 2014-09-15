@@ -2,9 +2,11 @@ module sat.main;
 
 import std.stdio;
 import std.getopt;
-import jive.array;
-import sat.sat, sat.parser, sat.solver, sat.xor, sat.twosat, sat.simplify;
 import std.datetime : Clock;
+import jive.array;
+
+import sat.sat, sat.parser, sat.solver, sat.xor, sat.twosat, sat.simplify;
+import sat.stats;
 
 /**
  * returns:
@@ -15,8 +17,8 @@ import std.datetime : Clock;
  */
 int main(string[] args)
 {
-	int timeout = 0;
-	getopt(args, "timeout|t", &timeout);
+	bool skipSolution = false;
+	getopt(args, "skipsolution|s", &skipSolution);
 
 	if(args.length != 2)
 	{
@@ -63,10 +65,14 @@ int main(string[] args)
 				(solverStart-roundStart).msecs/1000.0, (roundEnd-solverStart).msecs/1000.0, roundEnd.msecs/1000.0);
 		}
 
+		writeStats();
+
 		writefln("s SATISFIABLE");
 
 		sat.assign.extend();
-		sat.assign.writeAssignment();
+
+		if(!skipSolution)
+			sat.assign.writeAssignment();
 
 		foreach(ref c; clauses)
 			if(!sat.assign.isSatisfiedOuter(c[]))

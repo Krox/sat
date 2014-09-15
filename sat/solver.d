@@ -8,6 +8,7 @@ import jive.lazyarray;
 
 import sat.sat;
 import sat.propengine;
+import sat.stats;
 
 final class Solver
 {
@@ -142,6 +143,10 @@ final class Solver
 
 void invokeSolver(Sat sat, int numConflicts)
 {
+	swSolver.start();
+	scope(exit)
+		swSolver.stop();
+
 	sat.cleanup();
 
 	if(sat.varCount == 0)
