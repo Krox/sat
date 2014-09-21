@@ -17,11 +17,14 @@ class simplify
 	private LazyBitArray seen;
 	private Array!Lit stack;
 
-	int nRemovedClauses; // clauses removed by subsumption
-	int nRemovedClausesBin; // clauses removed by subsumption
-	int nRemovedLiterals; // clauses strengthened by self-subsuming resolution
-	int nRemovedLiteralsBin; // clauses strengthened by self-subsuming resolution
-	int nFailedLiterals;
+	// some statistics
+	int nRemovedCls; // clauses removed by subsumption
+	int nRemovedClsBin; // clauses removed by subsumption
+	int nRemovedLits; // clauses strengthened by self-subsuming resolution
+	int nRemovedLitsBin; // clauses strengthened by self-subsuming resolution
+	int nFailedLits;
+	long nImplications; // number if implications in the binary problem
+	int nLitsWithImplications;
 
 	void run()
 	{
@@ -47,25 +50,32 @@ class simplify
 		if(sat.assign.valueInner(a) != Lit.undef)
 			return;
 
+		if(sat.bins(a.neg).length == 0) // early-out for literals without any implications
+			return;
+
+		++nLitsWithImplications;
+
 		// mark all literals reachable from a
 		seen.reset();
 		assert(stack.empty);
 		stack.pushBack(a);
+		seen[a] = true;
 		while(!stack.empty)
 			foreach(b; sat.bins(stack.popBack().neg))
 				if(!seen[b])
 				{
 					seen[b] = true;
 					stack.pushBack(b);
+					++nImplications;
 				}
-		seen[a] = false; // in case of equivalent literals, a could have been set.
+		seen[a] = false;
 
 		// if !a is reachable, a is a failed literal
 		if(seen[a.neg])
 		{
 			sat.addUnary(a.neg);
 			sat.propagate();
-			++nFailedLiterals;
+			++nFailedLits;
 			return;
 		}
 
@@ -75,7 +85,7 @@ class simplify
 				if(seen[x])
 				{
 					sat.removeClause(k);
-					++nRemovedClausesBin;
+					++nRemovedClsBin;
 					break;
 				}
 
@@ -85,7 +95,7 @@ class simplify
 				if(seen[x])
 				{
 					sat.removeLiteral(k, a);
-					++nRemovedLiteralsBin;
+					++nRemovedLitsBin;
 					break;
 				}
 
@@ -99,7 +109,7 @@ class simplify
 		{
 			if(sat.clauses[j].irred) // if c subsumes an irreducible clause, c itself becomes irreducible
 				sat.makeClauseIrred(k);
-			++nRemovedClauses;
+			++nRemovedCls;
 			sat.removeClause(j);
 		}
 
@@ -111,7 +121,7 @@ class simplify
 			foreach(j; findSubsumed(c))
 			{
 				sat.removeLiteral(j, c[i]);
-				++nRemovedLiterals;
+				++nRemovedLits;
 			}
 			c[i] = c[i].neg;
 		}
@@ -160,6 +170,7 @@ class simplify
 	{
 		auto x = new simplify(sat);
 		x.run();
-		writefln("c simplify removed %s+%s cls, %s+%s lits and %s failed literals", x.nRemovedClausesBin, x.nRemovedClauses, x.nRemovedLiteralsBin, x.nRemovedLiterals, x.nFailedLiterals);
+		writefln("c simplify used %s implications from %s lits (%.1f %%)", x.nImplications, x.nLitsWithImplications, x.nLitsWithImplications/(2.0*sat.varCount)*100);
+		writefln("c simplify removed %s+%s cls, %s+%s lits and %s failed literals", x.nRemovedClsBin, x.nRemovedCls, x.nRemovedLitsBin, x.nRemovedLits, x.nFailedLits);
 	}
 }
