@@ -59,7 +59,7 @@ final class Sat
 	Array!int occCountRed;
 
 	private Array!(Array!Lit) binaryClauses;	// binary clauses. NOTE: can sometimes be asymmetric
-	private Array!bool binaryDirty;		// indicates that a binary-list may contain removed/fixed variables
+	Array!bool binaryDirty;		// indicates that a binary-list may contain removed/fixed variables
 	Array!bool binaryNew;	// indicates that there are new binary clauses, on which tarjan has not run yet
 	bool binaryAnyNew = false;
 

@@ -6,6 +6,7 @@ import std.datetime : Clock;
 import jive.array;
 
 import sat.sat, sat.parser, sat.solver, sat.xor, sat.twosat, sat.simplify;
+import sat.varelim;
 import sat.stats;
 
 /**
@@ -54,6 +55,8 @@ int main(string[] args)
 			solve2sat(sat);
 
 			solveXor(sat);
+
+			varElim(sat);
 
 			auto solverStart = Clock.currAppTick;
 
