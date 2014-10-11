@@ -1,14 +1,17 @@
 module sat.sat;
 
-import jive.array;
-import jive.lazyarray;
-import jive.queue;
-import jive.flatset;
+private import core.bitop : popcnt;
+
 private import std.stdio;
 private import std.algorithm : move, min, max, sort;
 private import std.array : join;
 private import std.conv : to;
 private import std.range : map;
+
+import jive.array;
+import jive.lazyarray;
+import jive.queue;
+import jive.flatset;
 
 public import sat.assignment;
 
@@ -358,6 +361,67 @@ final class Sat
 				occCountRed[x]++;
 		}
 		clauses.pushBack(move(d));
+	}
+
+	/** add clauses encoding that k or more of the literals in c should be true */
+	void addMinClause(Array!Lit c, int k, bool irred)
+	{
+		if(k <= 0)
+			return;
+
+		if(k == 1)
+			return addClause(move(c), irred);
+
+		if(k == c.length)
+		{
+			foreach(x; c)
+				addUnary(x);
+			return;
+		}
+
+		if(k > c.length)
+			throw new Unsat;
+
+		Array!Lit cl;
+		assert(c.length <= 30);
+		for(int sig = 0; sig < (1<<c.length); ++sig)
+			if(popcnt(sig) == c.length-k+1)
+			{
+				assert(cl.empty);
+				for(int i = 0; i < c.length; ++i)
+					if(sig & (1<<i))
+						cl.pushBack(c[i]);
+				addClause(move(cl), irred);
+			}
+	}
+
+	/** add clauses encoding that at most k of the literals in c should be true */
+	void addMaxClause(Array!Lit c, int k, bool irred)
+	{
+		if(k >= c.length)
+			return;
+
+		if(k == 0)
+		{
+			foreach(x; c)
+				addUnary(x.neg);
+			return;
+		}
+
+		if(k < 0)
+			throw new Unsat;
+
+		Array!Lit cl;
+		assert(c.length <= 30);
+		for(int sig = 0; sig < (1<<c.length); ++sig)
+			if(popcnt(sig) == k+1)
+			{
+				assert(cl.empty);
+				for(int i = 0; i < c.length; ++i)
+					if(sig & (1<<i))
+						cl.pushBack(c[i].neg);
+				addClause(move(cl), irred);
+			}
 	}
 
 	/** remove clause i */
