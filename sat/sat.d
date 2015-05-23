@@ -6,7 +6,7 @@ private import std.stdio;
 private import std.algorithm : move, min, max, sort;
 private import std.array : join;
 private import std.conv : to;
-private import std.range : map;
+private import std.algorithm : map;
 
 import jive.array;
 import jive.lazyarray;

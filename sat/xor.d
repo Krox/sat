@@ -3,6 +3,7 @@ module sat.xor;
 private import core.bitop : popcnt;
 private import std.stdio;
 private import std.range;
+private import std.algorithm;
 
 import jive.array;
 import jive.flatset;
