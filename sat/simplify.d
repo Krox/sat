@@ -47,7 +47,7 @@ class simplify
 	{
 		assert(sat.prop.empty);
 
-		if(sat.assign.valueInner(a) != Lit.undef)
+		if(sat.renum[a.var] == -1)
 			return;
 
 		if(sat.bins(a.neg).length == 0) // early-out for literals without any implications

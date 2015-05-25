@@ -107,57 +107,32 @@ class Unsat : Exception
 
 final class Assignment
 {
-	private Array!int out2in; // -1 for for eliminated/fixed variables after renumber
-	private Array!int in2out;
-	private Array!Lit assign; // outer variables: undef / elim / fixed
+	private Array!Lit assign; // undef / elim / fixed
 	private Array!Lit equ;
 
-	private Array!(Lit delegate(int)) extensionDelegate;
+	private Array!(Lit delegate()) extensionDelegate; // null for equivalences
 	private Array!int extensionVariable;
 
-	int varCountInner() const @property { return cast(int)in2out.length; }
-	int varCountOuter() const @property { return cast(int)out2in.length; }
+	int varCount() const @property { return cast(int)assign.length; }
 
 	this(int n)
 	{
 		assign.resize(n, Lit.undef);
 		equ.resize(n, Lit.undef);
-
-		out2in.resize(n);
-		in2out.resize(n);
-		for(int i = 0; i < n; ++i)
-			out2in[i] = in2out[i] = i;
-	}
-
-	Lit toInner(Lit l)
-	{
-		assert(l.proper);
-		assert(out2in[l.var] != -1);
-		return Lit(out2in[l.var], l.sign);
-	}
-
-	Lit toOuter(Lit l)
-	{
-		assert(l.proper);
-		return Lit(in2out[l.var], l.sign);
 	}
 
 	/** Lit.zero/one/undef/elim */
-	Lit valueOuter(Lit l)
+	Lit opIndex(Lit l)
 	{
+		if(!l.proper)
+			return l;
 		if(assign[l.var].fixed)
 			return assign[l.var]^l.sign;
 		else
 			return assign[l.var];
 	}
 
-	/** ditto */
-	Lit valueInner(Lit l)
-	{
-		return valueOuter(toOuter(l));
-	}
-
-	void eliminateVariableOuter(int v, Lit delegate(int v) dg)
+	void eliminateVariable(int v, Lit delegate() dg)
 	{
 		assert(assign[v] == Lit.undef);
 		assign[v] = Lit.elim;
@@ -165,27 +140,18 @@ final class Assignment
 		extensionVariable.pushBack(v);
 	}
 
-	private Lit equEval(int v)
+	void setEquivalence(Lit lit, Lit base)
 	{
-		assert(equ[v].proper);
-		return assign[equ[v].var]^equ[v].sign;
-	}
-
-	void setEquivalenceInner(Lit lit, Lit base)
-	{
-		lit = toOuter(lit);
-		base = toOuter(base);
-
 		assert(equ[lit.var] == Lit.undef);
 		equ[lit.var] = base^lit.sign;
-		eliminateVariableOuter(lit.var, &equEval);
+		assign[lit.var] = Lit.elim;
+		extensionDelegate.pushBack(null);
+		extensionVariable.pushBack(lit.var);
 	}
 
 	/** return false, if the literal was already set */
-	bool setLiteralInner(Lit l)
+	bool setLiteral(Lit l)
 	{
-		l = toOuter(l);
-
 		if(assign[l.var] == (Lit.one^l.sign))
 			return false;
 		else if(assign[l.var] == (Lit.zero^l.sign))
@@ -197,35 +163,27 @@ final class Assignment
 		return true;
 	}
 
-	void renumber()
-	{
-		int k = 0;
-		for(int i = 0; i < varCountOuter; ++i)
-			if(assign[i] == Lit.undef)
-				out2in[i] = k++;
-			else
-				out2in[i] = -1;
-
-		in2out.resize(k);
-		for(int i = 0; i < varCountOuter; ++i)
-			if(out2in[i] != -1)
-				in2out[out2in[i]] = i;
-	}
-
 	void extend()
 	{
 		while(!extensionVariable.empty)
 		{
 			int v = extensionVariable.popBack;
-			Lit lit = extensionDelegate.popBack()(v);
-			assert(lit.fixed && assign[v] == Lit.elim);
-			assign[v] = lit;
+			auto dg = extensionDelegate.popBack;
+
+			assert(assign[v] == Lit.elim);
+
+			if(dg is null) // equivalence
+				assign[v] = assign[equ[v].var]^equ[v].sign;
+			else // non-trivial extension
+				assign[v] = dg();
+
+			assert(assign[v].fixed);
 		}
 	}
 
 	bool complete() const
 	{
-		for(int i = 0; i < varCountOuter; ++i)
+		for(int i = 0; i < varCount; ++i)
 			if(assign[i] == Lit.undef)
 				return false;
 		return true;
@@ -234,7 +192,7 @@ final class Assignment
 	void writeAssignment() const
 	{
 		writef("v");
-		for(int i = 0; i < varCountOuter; ++i)
+		for(int i = 0; i < varCount; ++i)
 		{
 			if(!assign[i].fixed)
 				throw new Exception("tried to output an incomplete assignment");
@@ -243,7 +201,7 @@ final class Assignment
 		writefln(" 0");
 	}
 
-	bool isSatisfiedOuter(const(Lit)[] c) const
+	bool isSatisfied(const(Lit)[] c) const
 	{
 		foreach(l; c)
 			if((assign[l.var]^l.sign) == Lit.one)

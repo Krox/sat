@@ -54,7 +54,7 @@ struct Clause
 final class Sat
 {
 	Assignment assign;
-	int varCount() const @property { return assign.varCountInner; }
+	int varCount() const @property { return cast(int)renum.length; }
 
 	Array!Clause clauses;		// length=0 means clause was removed
 	private Array!(Array!int) occList;	// can contain clauses from which the literal was removed (or the clause itself can be removed). Also duplicates are possible.
@@ -72,9 +72,15 @@ final class Sat
 	bool varRemoved = false;	// indicates whether a variable/clause was removed since the last run of cleanup()
 	bool clauseRemoved = false;
 
+	Array!int renum; // inner -> outer
+
 	/** NOTE: clauseCount is only an estimate */
 	this(int varCount, int clauseCount = 0)
 	{
+		renum.resize(varCount);
+		for(int i = 0; i < varCount; ++i)
+			renum[i] = i;
+
 		clauses.reserve(clauseCount);
 		assign = new Assignment(varCount);
 		rebuildOccLists();
@@ -141,34 +147,35 @@ final class Sat
 		return binaryClauses[lit];
 	}
 
+	Lit toOuter(Lit l)
+	{
+		return Lit(renum[l.var], l.sign);
+	}
+
 	/** need to call rebuildOccLists() after renumber() */
 	void renumber()
 	{
+		auto trans = Array!int(varCount, -1); // old -> new
+		int count = 0;
+		for(int i = 0; i < varCount; ++i)
+			if(assign[Lit(renum[i], false)] == Lit.undef)
+				trans[i] = count++;
+
 		assert(prop.empty);
 		for(int i = 0; i < varCount*2; ++i)
 			foreach(ref l; bins(Lit(i))) // NOTE: bins(..) makes sure all lazy-removed is gone
-				l = assign.toOuter(l);
+				l = Lit(trans[l.var], l.sign);
 		foreach(ref c; clauses)
 			foreach(ref l; c)
-				l = assign.toOuter(l);
+				l = Lit(trans[l.var], l.sign);
 
 		foreach(i, ref list, ref bool rem; &binaryClauses.prune)
-			if(assign.valueInner(Lit(cast(int)i)) != Lit.undef)
+			if(trans[Lit(cast(int)i).var] == -1)
 				rem = true;
-		assign.renumber();
 
-		assert(binaryClauses.length == varCount*2);
-		binaryDirty.resize(varCount*2);
-		foreach(d; binaryDirty)
-			assert(d == false);
-		//binaryDirty[] = false;
-
-		foreach(ref c; clauses)
-			foreach(ref l; c)
-				l = assign.toInner(l);
-		foreach(ref list; binaryClauses)
-			foreach(ref l; list)
-				l = assign.toInner(l);
+		foreach(i, x, ref bool rem; &renum.prune)
+			if(trans[i] == -1)
+				rem = true;
 	}
 
 	/** renumber variables and make new occ-lists */
@@ -196,7 +203,7 @@ final class Sat
 	void setEquivalence(Lit a, Lit b)
 	{
 		assert(a.proper && b.proper);
-		assign.setEquivalenceInner(a, b);
+		assign.setEquivalence(toOuter(a), toOuter(b));
 		prop.push(Propagation(a, b));
 	}
 
@@ -210,7 +217,7 @@ final class Sat
 			++count;
 			auto p = prop.pop();
 
-			assert(assign.valueInner(p.a) != Lit.undef, "tried to propagate a variable that is already fixed/eliminated");
+			assert(renum[p.a.var] != -1 && assign[toOuter(p.a)] != Lit.undef, "tried to propagate a variable that is already fixed/eliminated");
 
 			if(p.b == Lit.one) // fix literal p.a
 			{
@@ -249,6 +256,8 @@ final class Sat
 			binaryClauses[p.a.neg].resize(0);
 			binaryDirty[p.a] = false;
 			binaryDirty[p.a.neg] = false;
+
+			renum[p.a.var] = -1;
 		}
 
 		if(count)
@@ -312,7 +321,7 @@ final class Sat
 	/** add a unary clause, i.e. fix a literal */
 	void addUnary(Lit l)
 	{
-		if(!assign.setLiteralInner(l))
+		if(!assign.setLiteral(toOuter(l)))
 			return;
 		prop.push(Propagation(l, Lit.one));
 	}

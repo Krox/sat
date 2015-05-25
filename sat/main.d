@@ -78,18 +78,20 @@ int main(string[] args)
 			sat.assign.writeAssignment();
 
 		foreach(ref c; clauses)
-			if(!sat.assign.isSatisfiedOuter(c[]))
+			if(!sat.assign.isSatisfied(c[]))
 				throw new Exception("FINAL TEST FAIL");
 
 		return 10;
 	}
 	catch(Unsat e)
 	{
+		writeStats();
 		writefln("s UNSATISFIABLE");
 		return 20;
 	}
 	catch(Timeout e)
 	{
+		writeStats();
 		writefln("c TIMEOUT");
 		return 30;
 	}

@@ -86,11 +86,11 @@ class varElim
 	 */
 	private static int calcScore(Sat sat, int v)
 	{
+		if(sat.renum[v] == -1)
+			return 1000;
+
 		auto pos = Lit(v, false);
 		auto neg = Lit(v, true);
-
-		if(sat.assign.valueInner(pos) != Lit.undef)
-			return 1000;
 
 		if(sat.occCountIrred[pos] + sat.bins(pos).length > 10 // its not worth scoring variables with many occurences
 			&& sat.occCountIrred[neg] + sat.bins(neg).length > 10)
@@ -181,10 +181,10 @@ class varElim
 
 	void eliminate(int v)
 	{
+		assert(sat.renum[v] != -1);
+
 		auto pos = Lit(v, false);
 		auto neg = Lit(v, true);
-
-		assert(sat.assign.valueInner(pos) == Lit.undef);
 
 		// add binary-binary resolvents
 		foreach(x; sat.bins(pos))
@@ -230,19 +230,19 @@ class varElim
 			sat.binaryDirty[x] = true;
 
 		// translate clauses to outer variable numbers
-		v = sat.assign.toOuter(Lit(v,false)).var;
+		v = sat.renum[v];
 		foreach(ref c; ext.clausesPos)
 			foreach(ref l; c)
-				l = sat.assign.toOuter(l);
+				l = sat.toOuter(l);
 		foreach(ref c; ext.clausesNeg)
 			foreach(ref l; c)
-				l = sat.assign.toOuter(l);
+				l = sat.toOuter(l);
 		foreach(ref x; ext.binsPos)
-			x = sat.assign.toOuter(x);
+			x = sat.toOuter(x);
 		foreach(ref x; ext.binsNeg)
-			x = sat.assign.toOuter(x);
+			x = sat.toOuter(x);
 
-		sat.assign.eliminateVariableOuter(v, &ext.eval);
+		sat.assign.eliminateVariable(v, &ext.eval);
 		sat.varRemoved = true;
 	}
 }
@@ -260,20 +260,20 @@ final class Extender
 		this.assign = assign;
 	}
 
-	Lit eval(int v)
+	Lit eval()
 	{
 		bool needPos, needNeg;
 		foreach(ref c; clausesPos)
-			if(!assign.isSatisfiedOuter(c[]))
+			if(!assign.isSatisfied(c[]))
 				{ needPos = true; break; }
 		foreach(ref c; clausesNeg)
-			if(!assign.isSatisfiedOuter(c[]))
+			if(!assign.isSatisfied(c[]))
 				{ needNeg = true; break; }
 		foreach(ref x; binsPos)
-			if(assign.valueOuter(x) != Lit.one)
+			if(assign[x] != Lit.one)
 				{ needPos = true; break; }
 		foreach(ref x; binsNeg)
-			if(assign.valueOuter(x) != Lit.one)
+			if(assign[x] != Lit.one)
 				{ needNeg = true; break; }
 
 		if(needPos && needNeg)
