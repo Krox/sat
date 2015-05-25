@@ -37,7 +37,7 @@ class simplify
 		swSubsume.start();
 		foreach(int i, ref c; sat.clauses)
 			if(c.length)
-				subsume(i, sat.clauses[i]);
+				subsume(i);
 		sat.propagate();
 		swSubsume.stop();
 	}
@@ -103,61 +103,65 @@ class simplify
 	}
 
 	/** remove all clauses subsumed by and strengthen all clauses using clause k */
-	private void subsume(int k, ref Clause c)
+	private void subsume(int k)
 	{
-		foreach(j; findSubsumed(c))
-		{
-			if(sat.clauses[j].irred) // if c subsumes an irreducible clause, c itself becomes irreducible
-				sat.makeClauseIrred(k);
-			++nRemovedCls;
-			sat.removeClause(j);
-		}
-
 		assert(sat.prop.empty);
 
-		for(int i = 0; i < c.length; ++i)
-		{
-			c[i] = c[i].neg;
-			foreach(j; findSubsumed(c))
-			{
-				sat.removeLiteral(j, c[i]);
-				++nRemovedLits;
-			}
-			c[i] = c[i].neg;
-		}
-
-		assert(sat.prop.empty);
+		Lit[] c = sat.clauses[k][];
+		Lit pivot = c[0];
+		foreach(l; c[1..$])
+			if(sat.occCount(l)+sat.occCount(l.neg) < sat.occCount(pivot)+sat.occCount(pivot.neg))
+				pivot = l;
+		foreach(j; sat.occs(pivot))
+			strengthen(j, k);
+		foreach(j; sat.occs(pivot.neg))
+			strengthen(j, k);
 	}
 
-	/* returns range of all clauses subsumed by c */
-	private auto findSubsumed(const ref Clause c)
+	/** strengthen i using k */
+	private void strengthen(int i, int k)
 	{
-		static struct SubsumeList
+		if(i == k)
+			return;
+
+		Lit rem = Lit.undef;
+
+		Lit[] a = sat.clauses[i][];
+		Lit[] b = sat.clauses[k][];
+
+		while(b.length) // modified subset algorithm
 		{
-			Sat sat;
-			const(Clause)* c;
-
-			int opApply(int delegate(int) dg)
+			if(a.length < b.length)
+				return;
+			else if(a.front == b.front)
 			{
-				/* find literal with shortes occurence list */
-				Lit best = (*c)[0];
-				foreach(l; (*c)[1..$])
-					if(sat.occCount(l) < sat.occCount(best))
-						best = l;
-
-				/* check all occurences of that literal for subsumption */ // TODO: use a bloom filter to speed this up
-				foreach(j; sat.occs(best))
-					if(&sat.clauses[j] !is c) // a clause may not subsume itself
-						 if(c.subset(sat.clauses[j]))
-							if(int r = dg(j))
-								return r;
-
-				return 0;
+				a.popFront;
+				b.popFront;
 			}
+			else if(a.front == b.front.neg)
+			{
+				if(rem != Lit.undef)
+					return;
+				rem = a.front;
+				a.popFront;
+				b.popFront;
+			}
+			else
+				a.popFront;
 		}
 
-		assert(c.length, "tried to subsume stuff with empty clause. probably not intended.");
-		return SubsumeList(sat, &c);
+		if(rem is Lit.undef) // subsumed without any flip -> remove clause i
+		{
+			if(sat.clauses[i].irred) // if k subsumes an irreducible clause, k itself becomes irreducible
+				sat.makeClauseIrred(k);
+			++nRemovedCls;
+			sat.removeClause(i);
+		}
+		else // subsumed with exactly one flip -> strengthen clause i
+		{
+			sat.removeLiteral(i, rem);
+			++nRemovedLits;
+		}
 	}
 
 	private this(Sat sat)
