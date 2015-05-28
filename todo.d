@@ -2,13 +2,14 @@
 
 import std.process;
 import std.stdio;
-import std.algorithm : splitter, sort;
+import std.algorithm : splitter, sort, map;
 import std.string : strip, format;
 import std.array : join;
 import std.getopt;
 import std.datetime : StopWatch;
 import std.conv : to;
-static import std.file;
+import std.range;
+import std.file : readText, isDir, write;
 
 int main(string[] args)
 {
@@ -32,19 +33,22 @@ int main(string[] args)
 		return -2;
 	}
 
-
-	auto files = executeShell("find "~cnfFolder~" -type f").output;
+	string[] filenames;
+	if(isDir(cnfFolder))
+		filenames = array(splitter(executeShell("find "~cnfFolder~" -type f").output, "\n"));
+	else
+		filenames = cnfFolder.readText.splitter("\n").map!"a.find(\" \")".array;
 
 	string[] timing;
 	int nSat, nUnsat, nTimeout;
 
-	foreach(file; splitter(files, "\n"))
+	foreach(i, file; filenames)
 	{
 		file = strip(file);
 		if(file.length == 0)
 			continue;
 
-		writefln("%s", file);
+		writefln("[%s / %s] %s", i, filenames.length, file);
 		StopWatch sw;
 		sw.start;
 		auto r = executeShell("timeout "~to!string(timeout)~"s /usr/bin/time -f \"%U\" -o timeTmp "~solver~" "~file);
@@ -85,7 +89,7 @@ int main(string[] args)
 	sort(timing);
 	if(timingFilename is null)
 		timingFilename = executeShell("date +%F_%R.timing").output.strip;
-	std.file.write(timingFilename, join(timing, "\n")~"\n");
+	write(timingFilename, join(timing, "\n")~"\n");
 
 	writefln("");
 	writefln("writing timing to: %s", timingFilename);
