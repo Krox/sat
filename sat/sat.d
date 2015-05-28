@@ -74,6 +74,9 @@ final class Sat
 
 	Array!int renum; // inner -> outer
 
+	Array!double activity;
+	double activityInc = 1;
+
 	/** NOTE: clauseCount is only an estimate */
 	this(int varCount, int clauseCount = 0)
 	{
@@ -87,6 +90,7 @@ final class Sat
 		binaryClauses.resize(varCount*2);
 		binaryDirty.resize(varCount*2);
 		binaryNew.resize(varCount*2);
+		activity.resize(varCount, 0);
 	}
 
 	int[] occs(Lit lit)
@@ -176,6 +180,25 @@ final class Sat
 		foreach(i, x, ref bool rem; &renum.prune)
 			if(trans[i] == -1)
 				rem = true;
+
+		foreach(i, x, ref bool rem; &activity.prune)
+			if(trans[i] == -1)
+				rem = true;
+	}
+
+	void bumpVariableActivity(int v)
+	{
+		activity[v] += activityInc;
+	}
+
+	void decayVariableActivity()
+	{
+		activityInc *= 1.05;
+		if(activityInc > 1e100)
+		{
+			activityInc /= 1e100;
+			activity[][] /= 1e100;
+		}
 	}
 
 	/** renumber variables and make new occ-lists */

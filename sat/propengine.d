@@ -58,10 +58,10 @@ struct Reason
 
 private struct ActivityComp
 {
-	double[] act;
+	Sat sat;
 	bool opCall(int a, int b)
 	{
-		return act[a] > act[b];
+		return sat.activity[a] > sat.activity[b];
 	}
 }
 
@@ -92,9 +92,7 @@ final class PropEngine
 	Lit[3] _conflict;
 	private LazyBitArray seen;
 
-	private Array!double activity;
 	private PriorityQueue!(int, ActivityComp, true) activityHeap;
-	private double activityInc = 1;
 
 	this(Sat sat)
 	{
@@ -108,9 +106,8 @@ final class PropEngine
 		assign.resize(2*varCount);
 		reason.resize(varCount);
 		seen.resize(varCount);
-		activity.resize(varCount, 0);
 		ActivityComp cmp;
-		cmp.act = activity[]; // NOTE: we assume that activity is never reallocated so that this slice stays valid
+		cmp.sat = sat;
 		activityHeap = typeof(activityHeap)(cmp);
 		for(int i = varCount-1; i >= 0; --i)
 			activityHeap.push(i);
@@ -294,7 +291,9 @@ final class PropEngine
 				return;
 			seen[lit.var] = true;
 
-			bumpVariableActivity(lit.var);
+			sat.bumpVariableActivity(lit.var);
+			if(lit.var in activityHeap)
+				activityHeap.decrease(lit.var);
 
 			if(level[lit.var] < currLevel) // reason side
 				buf.pushBack(lit);
@@ -352,7 +351,7 @@ final class PropEngine
 		}
 
 		conflict = null;
-		decayVariableActivity();
+		sat.decayVariableActivity();
 		return buf[];
 	}
 
@@ -380,23 +379,6 @@ final class PropEngine
 				activityHeap.push(lit.var);
 		}
 		savePoint.resize(l);
-	}
-
-	void bumpVariableActivity(int v)
-	{
-		activity[v] += activityInc;
-		if(v in activityHeap)
-			activityHeap.decrease(v);
-	}
-
-	void decayVariableActivity()
-	{
-		activityInc *= 1.01;
-		if(activityInc > 1e100)
-		{
-			activityInc /= 1e100;
-			activity[][] /= 1e100;
-		}
 	}
 
 	/** most active undefined variable. -1 if everything is assigned */
