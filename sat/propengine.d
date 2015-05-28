@@ -6,6 +6,7 @@ module sat.propengine;
 
 import jive.array;
 import jive.lazyarray;
+import jive.priorityqueue;
 private import std.algorithm : move, swap;
 import std.stdio;
 import sat.sat;
@@ -55,6 +56,15 @@ struct Reason
 	}
 }
 
+private struct ActivityComp
+{
+	double[] act;
+	bool opCall(int a, int b)
+	{
+		return act[a] > act[b];
+	}
+}
+
 final class PropEngine
 {
 	Sat sat;
@@ -83,6 +93,7 @@ final class PropEngine
 	private LazyBitArray seen;
 
 	private Array!double activity;
+	private PriorityQueue!(int, ActivityComp, true) activityHeap;
 	private double activityInc = 1;
 
 	this(Sat sat)
@@ -98,6 +109,11 @@ final class PropEngine
 		reason.resize(varCount);
 		seen.resize(varCount);
 		activity.resize(varCount, 0);
+		ActivityComp cmp;
+		cmp.act = activity[]; // NOTE: we assume that activity is never reallocated so that this slice stays valid
+		activityHeap = typeof(activityHeap)(cmp);
+		for(int i = varCount-1; i >= 0; --i)
+			activityHeap.push(i);
 
 		foreach(ci, ref c; sat.clauses)
 			if(c.length)
@@ -345,7 +361,11 @@ final class PropEngine
 	{
 		assert(currLevel > 0);
 		while(stack.length > savePoint[$-1])
-			assign[stack.popBack] = false;
+		{
+			Lit lit = stack.popBack;
+			assign[lit] = false;
+			activityHeap.push(lit.var);
+		}
 	}
 
 	/** unroll all assignments in levels > l, and set level to l */
@@ -353,13 +373,20 @@ final class PropEngine
 	{
 		assert(l < currLevel);
 		while(stack.length > savePoint[l])
-			assign[stack.popBack] = false;
+		{
+			Lit lit = stack.popBack;
+			assign[lit] = false;
+			if(lit.var !in activityHeap)
+				activityHeap.push(lit.var);
+		}
 		savePoint.resize(l);
 	}
 
 	void bumpVariableActivity(int v)
 	{
 		activity[v] += activityInc;
+		if(v in activityHeap)
+			activityHeap.decrease(v);
 	}
 
 	void decayVariableActivity()
@@ -373,13 +400,21 @@ final class PropEngine
 	}
 
 	/** most active undefined variable. -1 if everything is assigned */
-	int mostActiveVariable() const
+	int mostActiveVariable()
 	{
-		int best = -1;
-		for(int v = 0; v < varCount; ++v)
-			if(!assign[Lit(v, false)] && !assign[Lit(v, true)])
-				if(best == -1 || activity[v] > activity[best])
-					best = v;
-		return best;
+		while(!activityHeap.empty)
+		{
+			int v = activityHeap.pop;
+			if(assign[Lit(v, false)] || assign[Lit(v, true)])
+				continue;
+
+			// check the heap (very expensive, debug only)
+			//for(int i = 0; i < varCount; ++i)
+			//	assert(assign[Lit(i,false)] || assign[Lit(i,true)] || activity[i] <= activity[v]);
+
+			return v;
+		}
+
+		return -1;
 	}
 }
