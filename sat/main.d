@@ -58,9 +58,13 @@ int main(string[] args)
 
 			varElim(sat);
 
+			sat.cleanup();
+
 			auto solverStart = Clock.currAppTick;
 
-			invokeSolver(sat, 1000); // TODO: tweak this number (actually, do something more sophisticated than a number)
+			new Solver(sat).run(1000);
+			int nProps = sat.propagate(); // propagate learnt unit clauses
+			writefln("c solver removed %s vars", nProps);
 
 			auto roundEnd = Clock.currAppTick;
 
