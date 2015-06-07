@@ -429,7 +429,7 @@ final class Solver
 
 				auto conflictClause = analyzeConflict();
 				sat.addClause(Array!Lit(conflictClause), false);
-
+				--numConflicts;
 				//writefln("conflict: %s", conflictClause[]);
 
 				Reason reason;
@@ -440,18 +440,18 @@ final class Solver
 				else
 					reason = addClause(conflictClause);
 
-				if(numConflicts-- == 0)
-				{
-					unrollLevel(0);
-					return false;
-				}
-
 				if(conflictClause.length == 1)
 					unrollLevel(0);
 				else
 					unrollLevel(level[conflictClause[1].var]);
 				if(propagate(conflictClause[0], reason))
 					break;
+			}
+
+			if(numConflicts <= 0)
+			{
+				unrollLevel(0);
+				return false;
 			}
 		}
 

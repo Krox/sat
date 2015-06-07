@@ -76,7 +76,6 @@ class varElim
 		swVarElim.start();
 		auto x = new varElim(sat);
 		x.run();
-		writefln("c bve removed %s vars", x.nRemovedVariables);
 		swVarElim.stop();
 	}
 

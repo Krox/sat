@@ -27,27 +27,26 @@ int main(string[] args)
 		return -1;
 	}
 
+	int varCount;
+	Array!(Array!Lit) clauses;
+
+	writefln("cnf file: %s", args[1]);
+	readDimacs(args[1], varCount, clauses);
+	writefln("vars: %s, clauses: %s",varCount, clauses.length);
+
+
+	auto sat = new Sat(varCount, cast(int)clauses.length);
+
 	try
 	{
-		int varCount;
-		Array!(Array!Lit) clauses;
-
-		writefln("c reading file %s", args[1]);
-		readDimacs(args[1], varCount, clauses);
-		writefln("c v=%s c=%s",varCount, clauses.length);
-
-		auto sat = new Sat(varCount, cast(int)clauses.length);
 		foreach(ref c; clauses)
 			sat.addClause(c, true);
+		sat.propagate(); // propagate units clauses in cnf
 
-		writefln("c removed %s variables by unit propagation", sat.propagate());
+		sat.writeStatsHeader();
 
-		for(int round = 1; !sat.assign.complete; ++round)
+		while(!sat.assign.complete)
 		{
-			auto roundStart = Clock.currAppTick;
-
-			writefln("c ============================== round %s ==============================", round);
-
 			solve2sat(sat);
 
 			simplify(sat);
@@ -60,17 +59,13 @@ int main(string[] args)
 
 			sat.cleanup();
 
-			auto solverStart = Clock.currAppTick;
-
 			new Solver(sat).run(1000);
 			int nProps = sat.propagate(); // propagate learnt unit clauses
-			writefln("c solver removed %s vars", nProps);
 
-			auto roundEnd = Clock.currAppTick;
-
-			writefln("c used %#.1f s for inprocessing, %#.1f s for solving (total is %#.1f s)",
-				(solverStart-roundStart).msecs/1000.0, (roundEnd-solverStart).msecs/1000.0, roundEnd.msecs/1000.0);
+			sat.writeStatsLine();
 		}
+
+		sat.writeStatsFooter();
 
 		writeStats();
 
@@ -89,6 +84,7 @@ int main(string[] args)
 	}
 	catch(Unsat e)
 	{
+		sat.writeStatsFooter();
 		writeStats();
 		writefln("s UNSATISFIABLE");
 		return 20;

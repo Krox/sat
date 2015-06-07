@@ -174,7 +174,5 @@ class simplify
 	{
 		auto x = new simplify(sat);
 		x.run();
-		writefln("c simplify used %s implications from %s lits (%.1f %%)", x.nImplications, x.nLitsWithImplications, x.nLitsWithImplications/(2.0*sat.varCount)*100);
-		writefln("c simplify removed %s+%s cls, %s+%s lits and %s failed literals", x.nRemovedClsBin, x.nRemovedCls, x.nRemovedLitsBin, x.nRemovedLits, x.nFailedLits);
 	}
 }

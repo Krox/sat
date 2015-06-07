@@ -92,8 +92,5 @@ class solve2sat
 		auto x = new solve2sat(sat);
 		while(sat.binaryAnyNew)
 			x.run();
-
-		if(x.nProps)
-			writefln("c tarjan removed %s vars", x.nProps);
 	}
 }

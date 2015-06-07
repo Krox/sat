@@ -531,6 +531,49 @@ final class Sat
 			if(c.length)
 				writefln("%s 0", c);
 	}
+
+	void writeStatsHeader()
+	{
+		writefln("╔═════════╤═══════════════════╤═══════════════╤═══════════════╗");
+		writefln("║    vars │   binary  ternary │     long  len │   learnt  len ║");
+		writefln("╟─────────┼───────────────────┼───────────────┼───────────────╢");
+	}
+
+	void writeStatsLine()
+	{
+		long nBin, nTer, nLong, nLearnt, nLitsLong, nLitsLearnt;
+
+		for(int i = 0; i < varCount; ++i)
+		{
+			nBin += bins(Lit(i,false)).length;
+			nBin += bins(Lit(i,true)).length;
+		}
+		nBin /= 2;
+
+		for(int i = 0; i < clauses.length; ++i)
+			if(clauses[i].length)
+			{
+				if(clauses[i].length == 3)
+					++nTer;
+				else if(clauses[i].irred)
+				{
+					nLitsLong += clauses[i].length;
+					++nLong;
+				}
+				else
+				{
+					nLitsLearnt += clauses[i].length;
+					++nLearnt;
+				}
+			}
+
+		writefln("║ %#7s │ %#8s %#8s │ %#8s %#4.1f │ %#8s %#4.1f ║", varCount, nBin, nTer, nLong, cast(float)nLitsLong/nLong, nLearnt, cast(float)nLitsLearnt/nLearnt);
+	}
+
+	void writeStatsFooter()
+	{
+		writefln("╚═════════╧═══════════════════╧═══════════════╧═══════════════╝");
+	}
 }
 
 class Timeout : Exception

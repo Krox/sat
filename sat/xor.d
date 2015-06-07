@@ -26,8 +26,6 @@ void solveXor(Sat sat)
 	finder.gauss();
 	finder.implement();
 	int nProps = sat.propagate();
-
-	writefln("c gauss on %s xor clauses removed %s vars", nClauses, nProps);
 }
 
 struct XorClause
