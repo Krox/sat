@@ -31,7 +31,7 @@ struct Reason
 	union { Lit lit2; int n; }
 	Lit lit3;
 
-	static enum Reason descision = make(nil);
+	static enum Reason decision = make(nil);
 	static enum Reason unit = make(unary);
 
 	static Reason make(int type)
@@ -158,6 +158,8 @@ final class Solver
 	/** unroll all assignments in levels > l, and set level to l */
 	void unrollLevel(int l)
 	{
+		if(l == currLevel)
+			return;
 		assert(l < currLevel);
 		while(stack.length > savePoint[l])
 		{
@@ -186,7 +188,7 @@ final class Solver
 	 **/
 	bool propagate(Lit _x, Reason reason)
 	{
-		if(reason == Reason.descision)
+		if(reason == Reason.decision)
 			assert(currLevel > 0);
 
 		if(assign[_x])
@@ -354,6 +356,19 @@ final class Solver
 
 		buf[0] = stack[i].neg;
 
+		// At this point the conflict clause consists of the asserting literal
+		// in buf[0] (current level) and all seen[] literals in previous levels.
+		// So we can use seen[] to strengthen the clause
+
+		// strengthen the conflict clause using the reason clauses
+		foreach(k, lit, ref bool rem; &buf.prune)
+		{
+			if(k == 0)
+				continue;
+			rem = isRedundant(lit);
+		}
+
+		// move the highest level literal (excluding the asserting lit) to buf[1]
 		if(buf.length > 1)
 		{
 			int m = 1;
@@ -366,6 +381,28 @@ final class Solver
 		conflict = null;
 		sat.decayVariableActivity();
 		return buf[];
+	}
+
+	// helper for OTF strengthening
+	private bool isRedundant(Lit lit)
+	{
+		if(level[lit.var] == 0)
+			return true;
+		auto r = reason[lit.var];
+		switch(r.type)
+		{
+			case Reason.unary: assert(false); //return true;
+			case Reason.binary: return seen[r.lit2.var];
+			case Reason.ternary: return seen[r.lit2.var] && seen[r.lit3.var];
+			case Reason.clause:
+				foreach(l; clausesLong[r.n])
+				if(!seen[l.var])
+					return false;
+			return true;
+			case Reason.nil:
+				return false;
+			default: assert(false);
+		}
 	}
 
 	/** most active undefined variable. -1 if everything is assigned */
@@ -419,7 +456,7 @@ final class Solver
 			}
 
 			bumpLevel();
-			if(propagate(Lit(branch, false), Reason.descision))
+			if(propagate(Lit(branch, false), Reason.decision))
 				continue;
 
 			while(true)
