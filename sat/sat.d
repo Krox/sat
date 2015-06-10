@@ -77,6 +77,8 @@ final class Sat
 	Array!double activity;
 	double activityInc = 1;
 
+	Array!bool polarity;
+
 	/** NOTE: clauseCount is only an estimate */
 	this(int varCount, int clauseCount = 0)
 	{
@@ -91,6 +93,7 @@ final class Sat
 		binaryDirty.resize(varCount*2);
 		binaryNew.resize(varCount*2);
 		activity.resize(varCount, 0);
+		polarity.resize(varCount, false);
 	}
 
 	int[] occs(Lit lit)
@@ -182,6 +185,10 @@ final class Sat
 				rem = true;
 
 		foreach(i, x, ref bool rem; &activity.prune)
+			if(trans[i] == -1)
+				rem = true;
+
+		foreach(i, x, ref bool rem; &polarity.prune)
 			if(trans[i] == -1)
 				rem = true;
 	}

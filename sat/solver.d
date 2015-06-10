@@ -178,6 +178,7 @@ final class Solver
 		stack.pushBack(x);
 		level[x.var] = currLevel;
 		reason[x.var] = r;
+		sat.polarity[x.var] = x.sign;
 	}
 
 	/**
@@ -456,7 +457,7 @@ final class Solver
 			}
 
 			bumpLevel();
-			if(propagate(Lit(branch, false), Reason.decision))
+			if(propagate(Lit(branch, sat.polarity[branch]), Reason.decision))
 				continue;
 
 			while(true)
