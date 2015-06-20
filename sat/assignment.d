@@ -201,10 +201,25 @@ final class Assignment
 		writefln(" 0");
 	}
 
+	bool isSatisfied(Lit a) const
+	{
+		return (assign[a.var]^a.sign) == Lit.one;
+	}
+
+	bool isSatisfied(Lit a, Lit b) const
+	{
+		return isSatisfied(a) || isSatisfied(b);
+	}
+
+	bool isSatisfied(Lit a, Lit b, Lit c) const
+	{
+		return isSatisfied(a) || isSatisfied(b) || isSatisfied(c);
+	}
+
 	bool isSatisfied(const(Lit)[] c) const
 	{
 		foreach(l; c)
-			if((assign[l.var]^l.sign) == Lit.one)
+			if(isSatisfied(l))
 				return true;
 		return false;
 	}

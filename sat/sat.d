@@ -371,6 +371,12 @@ final class Sat
 		binaryAnyNew = true;
 	}
 
+	/** add a ternary clause */
+	void addTernary(Lit a, Lit b, Lit c)
+	{
+		return addClause(Array!Lit([a,b,c]), true);
+	}
+
 	/** add clause of arbitrary length */
 	void addClause(Array!Lit c, bool irred)
 	{
@@ -580,13 +586,5 @@ final class Sat
 	void writeStatsFooter()
 	{
 		writefln("╚═════════╧═══════════════════╧═══════════════╧═══════════════╝");
-	}
-}
-
-class Timeout : Exception
-{
-	this()
-	{
-		super("solver timed out");
 	}
 }

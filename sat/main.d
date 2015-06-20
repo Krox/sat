@@ -28,17 +28,25 @@ int main(string[] args)
 	}
 
 	int varCount;
+	Array!Lit unary;
+	Array!Pair binary;
+	Array!Triple ternary;
 	Array!(Array!Lit) clauses;
 
 	writefln("cnf file: %s", args[1]);
-	readDimacs(args[1], varCount, clauses);
-	writefln("vars: %s, clauses: %s",varCount, clauses.length);
-
+	readDimacs(args[1], varCount, unary, binary, ternary, clauses);
+	writefln("read %s / %s / %s / %s clauses in %.2f s", unary.length, binary.length, ternary.length, clauses.length, Clock.currAppTick.msecs/1000.0f);
 
 	auto sat = new Sat(varCount, cast(int)clauses.length);
 
 	try
 	{
+		foreach(c; unary)
+			sat.addUnary(c);
+		foreach(c; binary)
+			sat.addBinary(c.a, c.b);
+		foreach(c; ternary)
+			sat.addTernary(c.a, c.b, c.c);
 		foreach(ref c; clauses)
 			sat.addClause(c, true);
 		sat.propagate(); // propagate units clauses in cnf
@@ -76,6 +84,15 @@ int main(string[] args)
 		if(!skipSolution)
 			sat.assign.writeAssignment();
 
+		foreach(c; unary)
+			if(!sat.assign.isSatisfied(c))
+				throw new Exception("FINAL TEST FAIL");
+		foreach(c; binary)
+			if(!sat.assign.isSatisfied(c.a, c.b))
+				throw new Exception("FINAL TEST FAIL");
+		foreach(c; ternary)
+			if(!sat.assign.isSatisfied(c.a, c.b, c.c))
+				throw new Exception("FINAL TEST FAIL");
 		foreach(ref c; clauses)
 			if(!sat.assign.isSatisfied(c[]))
 				throw new Exception("FINAL TEST FAIL");
@@ -89,10 +106,6 @@ int main(string[] args)
 		writefln("s UNSATISFIABLE");
 		return 20;
 	}
-	catch(Timeout e)
-	{
-		writeStats();
-		writefln("c TIMEOUT");
-		return 30;
-	}
+
+	return -2;
 }
