@@ -146,8 +146,13 @@ final class Sat
 		// clean up if neccessary
 		if(binaryDirty[lit])
 		{
+			sort(binaryClauses[lit][]);
+			Lit last = Lit.undef;
 			foreach(x, ref bool rem; &binaryClauses[lit].prune)
-				rem = binaryClauses[x].empty;
+			{
+				rem = binaryClauses[x].empty || x == last;
+				last = x;
+			}
 			binaryDirty[lit] = false;
 		}
 
