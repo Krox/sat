@@ -48,7 +48,7 @@ int main(string[] args)
 		foreach(c; ternary)
 			sat.addTernary(c.a, c.b, c.c);
 		foreach(ref c; clauses)
-			sat.addClause(c, true);
+			sat.addClause(c[], true);
 		sat.propagate(); // propagate units clauses in cnf
 
 		sat.writeStatsHeader();

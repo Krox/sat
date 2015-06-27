@@ -23,13 +23,11 @@ struct Reason
 		nil,
 		unary,
 		binary,
-		ternary,
 		clause
 	}
 
 	int type;
 	union { Lit lit2; int n; }
-	Lit lit3;
 
 	static enum Reason decision = make(nil);
 	static enum Reason unit = make(unary);
@@ -45,13 +43,6 @@ struct Reason
 	{
 		this.type = binary;
 		this.lit2 = lit2;
-	}
-
-	this(Lit lit2, Lit lit3)
-	{
-		this.type = ternary;
-		this.lit2 = lit2;
-		this.lit3 = lit3;
 	}
 
 	this(int n)
@@ -75,10 +66,6 @@ final class Solver
 	Sat sat;
 	int varCount() const @property { return sat.varCount; }
 
-	static struct pair { Lit a,b; }
-	Array!(Array!pair) clausesTri;
-
-	Array!(Array!Lit) clausesLong;	// no need for sorting, so don't use Clause
 	Array!(Array!int) watches;
 
 	Array!bool assign;
@@ -99,7 +86,6 @@ final class Solver
 		this.sat = sat;
 		assert(varCount > 0);
 
-		clausesTri.resize(2*varCount);
 		watches.resize(2*varCount);
 		stack.reserve(varCount);
 		level.resize(varCount);
@@ -113,39 +99,39 @@ final class Solver
 			if(sat.renum[i] != -1)
 				activityHeap.push(i);
 
-		foreach(ci, ref c; sat.clauses)
+		foreach(int i, ref c; sat.clauses)
 			if(c.length)
-				addClause(c[]);
+			{
+				watches[c[0]].pushBack(i);
+				watches[c[1]].pushBack(i);
+			}
 	}
 
 	/**
-	 * add a new clause
-	 *    - makes copy of the argument (if applicable, as short clauses are implicit)
+	 * add a new clause to the solver and the underlying sat
 	 *    - does not immediately propagate using the new clause
 	 *    - returns reason appropriate for setting c[0] using the new clause
 	 *    - sets watches on c[0] and c[1], so make sure that is okay
 	 */
-	Reason addClause(Lit[] c)
+	Reason addClause(const Lit[] c)
 	{
+		int i = sat.addClause(c, false);
+
 		switch(c.length)
 		{
 			case 0:
-			case 1:
-			case 2: // binary clauses should be put into sat directy
-				throw new Exception("invalid clause length in solver");
+				assert(false);
 
-			case 3:
-				clausesTri[c[0]].pushBack(pair(c[1], c[2]));
-				clausesTri[c[1]].pushBack(pair(c[0], c[2]));
-				clausesTri[c[2]].pushBack(pair(c[0], c[1]));
-				return Reason(c[1], c[2]);
+			case 1:
+				return Reason.unit;
+
+			case 2:
+				return Reason(c[1]);
 
 			default:
-				assert(c.length >= 4);
-				int i = cast(int)clausesLong.length;
+				assert(i >= 0);
 				watches[c[0]].pushBack(i);
 				watches[c[1]].pushBack(i);
-				clausesLong.pushBack(Array!Lit(c));
 				return Reason(i);
 		}
 	}
@@ -223,32 +209,9 @@ final class Solver
 				set(y, Reason(x.neg));
 			}
 
-			foreach(pair c; clausesTri[x.neg])
-			{
-				if(assign[c.a] || assign[c.b])	// clause satisfied -> do nothing
-					continue;
-
-				if(assign[c.a.neg])
-					if(assign[c.b.neg])
-					{
-						_conflict[0] = x.neg;
-						_conflict[1] = c.a;
-						_conflict[2] = c.b;
-						conflict = _conflict[0..3];
-						return false;
-					}
-					else
-						set(c.b, Reason(x.neg, c.a));
-				else
-					if(assign[c.b.neg])
-						set(c.a, Reason(x.neg, c.b));
-					else
-						continue;
-			}
-
 			outer: foreach(i, ref bool rem; &watches[x.neg].prune)
 			{
-				auto c = clausesLong[i][];
+				auto c = sat.clauses[i][];
 
 				if(x.neg == c[1])
 					swap(c[0], c[1]);
@@ -339,13 +302,8 @@ final class Solver
 					visit(reason[stack[i].var].lit2);
 					break;
 
-				case Reason.ternary:
-					visit(reason[stack[i].var].lit2);
-					visit(reason[stack[i].var].lit3);
-					break;
-
 				case Reason.clause:
-					foreach(lit; clausesLong[reason[stack[i].var].n])
+					foreach(lit; sat.clauses[reason[stack[i].var].n])
 						if(lit.var != stack[i].var)
 							visit(lit);
 					break;
@@ -394,9 +352,8 @@ final class Solver
 		{
 			case Reason.unary: assert(false); //return true;
 			case Reason.binary: return seen[r.lit2.var];
-			case Reason.ternary: return seen[r.lit2.var] && seen[r.lit3.var];
 			case Reason.clause:
-				foreach(l; clausesLong[r.n])
+				foreach(l; sat.clauses[r.n])
 				if(!seen[l.var])
 					return false;
 			return true;
@@ -466,17 +423,9 @@ final class Solver
 					throw new Unsat;
 
 				auto conflictClause = analyzeConflict();
-				sat.addClause(Array!Lit(conflictClause), false);
+				auto reason = addClause(conflictClause[]);
 				--numConflicts;
 				//writefln("conflict: %s", conflictClause[]);
-
-				Reason reason;
-				if(conflictClause.length == 1)
-					reason = Reason.unit;
-				else if(conflictClause.length == 2)
-					reason = Reason(conflictClause[1]);
-				else
-					reason = addClause(conflictClause);
 
 				if(conflictClause.length == 1)
 					unrollLevel(0);

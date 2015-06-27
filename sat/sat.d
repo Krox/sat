@@ -3,7 +3,7 @@ module sat.sat;
 private import core.bitop : popcnt;
 
 private import std.stdio;
-private import std.algorithm : move, min, max, sort;
+private import std.algorithm : move, min, max, sort, swap;
 private import std.array : join;
 private import std.conv : to;
 private import std.algorithm : map;
@@ -11,19 +11,18 @@ private import std.algorithm : map;
 import jive.array;
 import jive.lazyarray;
 import jive.queue;
-import jive.flatset;
 
 public import sat.assignment;
 
 struct Clause
 {
-	FlatSet!Lit lits;
+	Array!Lit lits;
 	alias lits this;
 	bool irred;
 
 	this(Array!Lit lits, bool irred)
 	{
-		this.lits = FlatSet!Lit(move(lits));
+		this.lits = move(lits);
 		this.irred = irred;
 	}
 
@@ -42,12 +41,41 @@ struct Clause
 		return join(map!"a.toString"(lits[]), " ");
 	}
 
-	bool tautological() const @property
+	/**
+	 * replace literal a by b in this clause (both a and b have to b proper literals)
+	 *   - assumes/asserts that a is contained and b.neg is not contained
+	 *   - returns false if b was already in (so it shrinked)
+	 *   - returns true otherwise
+	 */
+	bool replaceLiteral(Lit a, Lit b)
 	{
-		for(size_t i = 1; i < length; ++i)
-			if(this[i].var == this[i-1].var)
-				return true;
-		return false;
+		assert(a.var != b.var);
+		assert(b.proper);
+		assert(length);
+
+		int pos = -1;
+		bool shorten = false;
+		foreach(int k, Lit l; lits[])
+		{
+			if(l == a)
+				pos = k;
+			if(l == b)
+				shorten = true;
+
+			assert(l != b.neg);
+		}
+
+		assert(pos != -1);
+
+		if(shorten) // b was already in -> clause becomes shorter
+		{
+			swap(lits[pos], lits.back);
+			lits.popBack;
+		}
+		else
+			lits[pos] = b;
+
+		return !shorten;
 	}
 }
 
@@ -104,7 +132,7 @@ final class Sat
 			int last = -1;
 			foreach(int k, ref bool rem; &occList[lit].prune)
 			{
-				rem = (lit !in clauses[k].lits) || (k == last);
+				rem = !clauses[k].lits.containsValue(lit) || (k == last);
 				last = k;
 			}
 		}
@@ -138,7 +166,33 @@ final class Sat
 				else
 					occCountRed[l]++;
 			}
+	}
 
+	/** put a clause into the appropriate occ lists */
+	void attachClause(int i)
+	{
+		assert(clauses[i].length, "tried to attach a removed clause");
+
+		bool irred = clauses[i].irred;
+		foreach(x; clauses[i][])
+		{
+			occList[x].pushBack(i);
+			if(irred)
+				occCountIrred[x]++;
+			else
+				occCountRed[x]++;
+		}
+	}
+
+	/** (lazily) remove a clause from its occ lists */
+	void detachClause(int i)
+	{
+		bool irred = clauses[i].irred;
+		foreach(l; clauses[i][])
+			if(irred)
+				occCountIrred[l]--;
+			else
+				occCountRed[l]--;
 	}
 
 	ref Array!Lit bins(Lit lit)
@@ -301,34 +355,10 @@ final class Sat
 		return count;
 	}
 
-	/** add literal a to clause i */
-	void addLiteral(int i, Lit a)
-	{
-		assert(a.proper);
-		assert(clauses[i].length);
-
-		if(a.neg in clauses[i].lits) // tautology -> remove clause
-		{
-			removeClause(i);
-			return;
-		}
-
-		if(clauses[i].add(a))
-		{
-			occList[a].pushBack(i);
-			if(clauses[i].irred)
-				occCountIrred[a]++;
-			else
-				occCountRed[a]++;
-		}
-
-		assert(!clauses[i].tautological);
-	}
-
 	/** remove literal a from clause i */
 	void removeLiteral(int i, Lit a)
 	{
-		if(!clauses[i].remove(a))
+		if(!clauses[i].removeValue(a))
 			assert(false, "literal to be deleted was not found");
 
 		if(clauses[i].irred)
@@ -344,13 +374,33 @@ final class Sat
 		else assert(clauses[i].length > 2);
 	}
 
-	/** replace a by b in clause i (both a and b have to be proper literals) */
+	/** replace a by b in clause i (both a and b have to b proper literals) */
 	void replaceLiteral(int i, Lit a, Lit b)
 	{
-		assert(a.var != b.var);
-		addLiteral(i, b);
-		if(clauses[i].length) // clause might have become tautological
-			removeLiteral(i, a);
+		if(clauses[i].containsValue(b.neg))
+			return removeClause(i);
+
+		if(clauses[i].irred)
+			occCountIrred[a]--;
+		else
+			occCountRed[a]--;
+
+		if(clauses[i].replaceLiteral(a,b))
+		{
+			occList[b].pushBack(i);
+			if(clauses[i].irred)
+				occCountIrred[b]++;
+			else
+				occCountRed[b]++;
+		}
+		else
+		{
+			if(clauses[i].length == 2)
+			{
+				addBinary(clauses[i][0], clauses[i][1]);
+				removeClause(i);
+			}
+		}
 	}
 
 	/** add a unary clause, i.e. fix a literal */
@@ -379,48 +429,62 @@ final class Sat
 	/** add a ternary clause */
 	void addTernary(Lit a, Lit b, Lit c)
 	{
-		return addClause(Array!Lit([a,b,c]), true);
+		Lit[3] cl;
+		cl[0] = a;
+		cl[1] = b;
+		cl[2] = c;
+		addClause(cl[], true);
 	}
 
-	/** add clause of arbitrary length */
-	void addClause(Array!Lit c, bool irred)
+	/**
+	 *  add clause of arbitrary length
+	 *  returns index of new clause
+	 *  returns -1 on tautologies and small implicitly stored clauses
+	 */
+	int addClause(const Lit[] c, bool irred)
 	{
-		foreach(ref l, ref bool rem; &c.prune)
-			assert(l.proper);
-
 		if(c.length == 0)
 			throw new Unsat;
 
-		auto d = Clause(move(c), irred);
+		// NOTE: do not sort the clause: c[0], c[1] might be there for a reason.
 
-		if(d.length == 1)
-			return addUnary(d[0]);
+		// check for tautology
+		for(int i = 0; i < c.length; ++i)
+			for(int j = i+1; j < c.length; ++j)
+			{
+				assert(c[i] != c[j]);
+				if(c[i] == c[j].neg)
+					return -1;
+			}
 
-		if(d.length == 2)
-			return addBinary(d[0], d[1]);
-
-		if(d.tautological)
-			return;
-
-		foreach(x; d)
+		if(c.length == 1)
 		{
-			occList[x].pushBack(cast(int)clauses.length);
-			if(irred)
-				occCountIrred[x]++;
-			else
-				occCountRed[x]++;
+			addUnary(c[0]);
+			return -1;
 		}
-		clauses.pushBack(move(d));
+
+		if(c.length == 2)
+		{
+			addBinary(c[0], c[1]);
+			return -1;
+		}
+
+		clauses.pushBack(Clause(Array!Lit(c), irred));
+		attachClause(cast(int)clauses.length-1);
+		return cast(int)clauses.length-1;
 	}
 
 	/** add clauses encoding that k or more of the literals in c should be true */
-	void addMinClause(Array!Lit c, int k, bool irred)
+	void addMinClause(const Lit[] c, int k, bool irred)
 	{
 		if(k <= 0)
 			return;
 
 		if(k == 1)
-			return addClause(move(c), irred);
+		{
+			addClause(c, irred);
+			return;
+		}
 
 		if(k == c.length)
 		{
@@ -441,12 +505,12 @@ final class Sat
 				for(int i = 0; i < c.length; ++i)
 					if(sig & (1<<i))
 						cl.pushBack(c[i]);
-				addClause(move(cl), irred);
+				addClause(cl[], irred);
 			}
 	}
 
 	/** add clauses encoding that at most k of the literals in c should be true */
-	void addMaxClause(Array!Lit c, int k, bool irred)
+	void addMaxClause(const Lit[] c, int k, bool irred)
 	{
 		if(k >= c.length)
 			return;
@@ -470,21 +534,17 @@ final class Sat
 				for(int i = 0; i < c.length; ++i)
 					if(sig & (1<<i))
 						cl.pushBack(c[i].neg);
-				addClause(move(cl), irred);
+				addClause(cl[], irred);
 			}
 	}
 
 	/** remove clause i */
-	Clause removeClause(int i)
+	void removeClause(int i)
 	{
-		assert(clauses[i].length != 0);
-		foreach(l; clauses[i])
-			if(clauses[i].irred)
-				occCountIrred[l]--;
-			else
-				occCountRed[l]--;
+		assert(clauses[i].length);
 		clauseRemoved = true;
-		return move(clauses[i]);
+		detachClause(i);
+		clauses[i].resize(0);
 	}
 
 	/** mark clause i as irreducible */
@@ -528,13 +588,14 @@ final class Sat
 		for(int i = 0; i < varCount*2; ++i)
 		{
 			foreach(k; occs(Lit(i)))
-				assert(Lit(i) in clauses[k].lits);
+				assert(clauses[k].lits.containsValue(Lit(i)));
 
 			count += occs(Lit(i)).length;
 		}
 
 		foreach(ref c; clauses)
 			count -= c.length;
+
 		assert(count == 0);
 		writefln("c check okay");
 	}

@@ -110,13 +110,13 @@ class varElim
 		foreach(i; sat.occs(pos))
 			if(sat.clauses[i].irred)
 				foreach(x; sat.bins(neg))
-					if(x.neg !in sat.clauses[i].lits)
+					if(!sat.clauses[i].lits.containsValue(x.neg))
 						if(++score > 0)
 							return 1000;
 		foreach(i; sat.occs(neg))
 			if(sat.clauses[i].irred)
 				foreach(x; sat.bins(pos))
-					if(x.neg !in sat.clauses[i].lits)
+					if(!sat.clauses[i].lits.containsValue(x.neg))
 						if(++score > 0)
 							return 1000;
 
@@ -136,45 +136,36 @@ class varElim
 	static Clause resolvent(ref Clause a, ref Clause b, Lit l)
 	{
 		assert(a.irred && b.irred);
-		auto c = Clause(a.amalgamation(b), true);
-		if(!c.remove(l) || !c.remove(l.neg))
-			assert(false);
-		return c;
+		auto c = Array!Lit(a.lits[]);
+		c.pushBack(b.lits[]);
+		sort(c[]);
+		Lit last = Lit.undef;
+		foreach(lit, ref bool rem; &c.prune)
+		{
+			rem = (lit==last || lit==l || lit==l.neg);
+			last = lit;
+		}
+
+		return Clause(move(c), a.irred && b.irred);
 	}
 
 	/** resolvent of a with the binary clause b,l using the pivot l */
-	static Clause resolvent(ref Clause a, Lit b, Lit l)
+	static Clause resolvent(Clause a, Lit b, Lit l)
 	{
 		assert(a.irred);
-		auto c = a;
-		c.add(b);
-		if(!c.remove(l.neg))
-			assert(false);
-		return c;
+		a.replaceLiteral(l.neg, b);
+		return a;
 	}
 
 	/** check whether a resolvent is tautological without actually computing it */
-	static bool isResolventTautological(const ref Clause _a, const ref Clause _b)
+	static bool isResolventTautological(const ref Clause a, const ref Clause b)
 	{
 		int r = 0;
-		auto a = _a[];
-		auto b = _b[];
-
-		while(a.length && b.length)
-		{
-			if(a.front.neg == b.front)
-			{
-				if(++r >= 2)
-					return true;
-				a.popFront;
-				b.popFront;
-			}
-			else if(a.front < b.front)
-				a.popFront;
-			else
-				b.popFront;
-		}
-
+		foreach(x; a[])
+			foreach(y; b[])
+				if(x == y.neg)
+					if(++r >= 2)
+						return true;
 		return false;
 	}
 
@@ -197,28 +188,36 @@ class varElim
 		foreach(i; sat.occs(pos))
 			if(sat.clauses[i].irred)
 				foreach(x; sat.bins(neg))
-					if(x.neg !in sat.clauses[i].lits)
-						sat.addClause(resolvent(sat.clauses[i], x, neg), true);
+					if(!sat.clauses[i].containsValue(x.neg))
+						sat.addClause(resolvent(sat.clauses[i], x, neg)[], true); // TODO: dont allocate the clause as temporary
 		foreach(i; sat.occs(neg))
 			if(sat.clauses[i].irred)
 				foreach(x; sat.bins(pos))
-					if(x.neg !in sat.clauses[i].lits)
-						sat.addClause(resolvent(sat.clauses[i], x, pos), true);
+					if(!sat.clauses[i].containsValue(x.neg))
+						sat.addClause(resolvent(sat.clauses[i], x, pos)[], true);
 
 		// add long-long resolvents
 		foreach(i; sat.occs(pos))
 			if(sat.clauses[i].irred)
 				foreach(j; sat.occs(neg))
 					if(sat.clauses[j].irred)
-						sat.addClause(resolvent(sat.clauses[i], sat.clauses[j], pos), true); // 'addClause' will not actually add tautologies
+						sat.addClause(resolvent(sat.clauses[i], sat.clauses[j], pos)[], true); // 'addClause' will not actually add tautologies
 
 		auto ext = new Extender(sat.assign);
 
 		// move old long clauses from the problem to the solution extender
 		foreach(i; sat.occs(pos))
-			ext.clausesPos.pushBack(sat.removeClause(i)); // TODO: skip reducible
+		{
+			if(sat.clauses[i].irred)
+				ext.clausesPos.pushBack(sat.clauses[i]);
+			sat.removeClause(i);
+		}
 		foreach(i; sat.occs(neg))
-			ext.clausesNeg.pushBack(sat.removeClause(i));
+		{
+			if(sat.clauses[i].irred)
+				ext.clausesNeg.pushBack(sat.clauses[i]);
+			sat.removeClause(i);
+		}
 
 		// move old binary clauses from the problem to the solution extender
 		ext.binsPos = move(sat.bins(pos));
