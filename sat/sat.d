@@ -18,12 +18,22 @@ struct Clause
 {
 	Array!Lit lits;
 	alias lits this;
-	bool irred;
+	ubyte flags;
+
+	enum FLAG_IRRED = 1;
+	enum FLAG_MARKED = 2;
+
+	bool irred() const @property { return (flags & FLAG_IRRED) != 0; }
+	bool marked() const @property { return (flags & FLAG_MARKED) != 0; }
+	void makeIrred() { flags |= FLAG_IRRED; }
+	void makeRed() { flags &= ~FLAG_IRRED; }
+	void mark() { flags |= FLAG_MARKED; }
+	void unmark() { flags &= ~FLAG_MARKED; }
 
 	this(Array!Lit lits, bool irred)
 	{
 		this.lits = move(lits);
-		this.irred = irred;
+		this.flags = irred;
 	}
 
 	uint signs() const @property
@@ -552,7 +562,7 @@ final class Sat
 	{
 		if(clauses[i].irred)
 			return;
-		clauses[i].irred = true;
+		clauses[i].makeIrred();
 		foreach(l; clauses[i])
 		{
 			occCountRed[l]--;

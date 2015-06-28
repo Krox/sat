@@ -68,24 +68,58 @@ final class XorSolver
 		clauses.pushBack(move(c));
 	}
 
+	/**
+	 *  returns true if a is a subclause of b^signs.
+	 *  assumes both clauses are
+	 */
+	bool subclause(const(Lit)[] a, const(Lit)[] b, uint signs)
+	{
+		while(true)
+		{
+			if(a.length > b.length)
+				return false;
+			if(a.length == 0)
+				return true;
+			if(a.front == (b.front^((signs&1) != 0)))
+				a.popFront;
+
+			b.popFront;
+			signs /= 2;
+		}
+	}
+
 	/** search for xor clauses encoded in the cnf clauses */
+	// TODO: enable the searcher to find use (virtual) binary clauses
 	void search()
 	{
-		Array!bool mark;
-		mark.resize(sat.clauses.length);
-		outer: foreach(ci, const ref c; sat.clauses)
-			if(c.length >= 3 && c.length <= 6)
-				if(!mark[ci])
+		// one watch per clause, one list per variable (not per literal!)
+		Array!(Array!int) watches;
+		watches.resize(sat.varCount);
+		foreach(int i, ref c; sat.clauses)
+			if(c.length && c.length <= 6)
+			{
+				sort(sat.clauses[i][]);
+				sat.clauses[i].unmark;
+				watches[sat.clauses[i][0].var].pushBack(i);
+			}
+
+		outer: foreach(const ref c; sat.clauses)
+			if(c.length && c.length <= 6)
+				if(!c.marked)
 				{
-					uint sig = c.signs;
-					for(uint i = 1; i < (1 << c.length); ++i)
-						if(popcnt(i) % 2 == 0)
+					inner: for(uint signs = 1; signs < (1 << c.length); ++signs)
+						if(popcnt(signs) % 2 == 0)
 						{
-							int j = sat.findClause(c, i);
-							if(j == -1)
-								continue outer;
-							if(sat.clauses[j].length == c.length)
-								mark[j] = true;
+							foreach(Lit l; c[])
+								foreach(k; watches[l.var])
+									if(subclause(sat.clauses[k][], c[], signs))
+									{
+										if(sat.clauses[k].length == c.length)
+											sat.clauses[k].mark();
+										continue inner;
+									}
+
+							continue outer;
 						}
 
 					addClause(XorClause(c));

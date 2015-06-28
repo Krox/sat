@@ -34,7 +34,8 @@ int main(string[] args)
 	}
 
 	string[] filenames;
-	if(isDir(cnfFolder))
+	bool readDir = isDir(cnfFolder);
+	if(readDir)
 		filenames = array(splitter(executeShell("find "~cnfFolder~" -type f").output, "\n"));
 	else
 		filenames = cnfFolder.readText.splitter("\n").map!"a.find(\" \")".array;
@@ -86,7 +87,8 @@ int main(string[] args)
 		timing ~= format("%s %s", sw.peek.msecs/1000.0, file);
 	}
 
-	sort(timing);
+	if(readDir)
+		sort(timing);
 	if(timingFilename is null)
 		timingFilename = executeShell("date +%F_%R.timing").output.strip;
 	write(timingFilename, join(timing, "\n")~"\n");
