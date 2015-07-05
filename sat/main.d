@@ -37,7 +37,7 @@ int main(string[] args)
 	readDimacs(args[1], varCount, unary, binary, ternary, clauses);
 	writefln("read %s / %s / %s / %s clauses in %.2f s", unary.length, binary.length, ternary.length, clauses.length, Clock.currAppTick.msecs/1000.0f);
 
-	auto sat = new Sat(varCount, cast(int)clauses.length);
+	auto sat = new Sat(varCount);
 
 	try
 	{

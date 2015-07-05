@@ -35,9 +35,8 @@ class simplify
 		swSubsumeBinary.stop();
 
 		swSubsume.start();
-		foreach(int i, ref c; sat.clauses)
-			if(c.length)
-				subsume(i);
+		foreach(i, ref c; sat.clauses)
+			subsume(i);
 		sat.propagate();
 		swSubsume.stop();
 	}
@@ -103,7 +102,7 @@ class simplify
 	}
 
 	/** remove all clauses subsumed by and strengthen all clauses using clause k */
-	private void subsume(int k)
+	private void subsume(CRef k)
 	{
 		assert(sat.prop.empty);
 
@@ -119,7 +118,7 @@ class simplify
 	}
 
 	/** strengthen i using k */
-	private void strengthen(int i, int k)
+	private void strengthen(CRef i, CRef k)
 	{
 		if(i == k)
 			return;

@@ -93,17 +93,17 @@ final class XorSolver
 	void search()
 	{
 		// one watch per clause, one list per variable (not per literal!)
-		Array!(Array!int) watches;
+		Array!(Array!CRef) watches;
 		watches.resize(sat.varCount);
-		foreach(int i, ref c; sat.clauses)
+		foreach(i, ref c; sat.clauses)
 			if(c.length && c.length <= 6)
 			{
 				sort(sat.clauses[i][]);
 				sat.clauses[i].unmark;
-				watches[sat.clauses[i][0].var].pushBack(i);
+				watches[c[0].var].pushBack(i);
 			}
 
-		outer: foreach(const ref c; sat.clauses)
+		outer: foreach(i, ref c; sat.clauses)
 			if(c.length && c.length <= 6)
 				if(!c.marked)
 				{

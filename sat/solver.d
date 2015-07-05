@@ -27,7 +27,7 @@ struct Reason
 	}
 
 	int type;
-	union { Lit lit2; int n; }
+	union { Lit lit2; CRef n; }
 
 	static enum Reason decision = make(nil);
 	static enum Reason unit = make(unary);
@@ -45,7 +45,7 @@ struct Reason
 		this.lit2 = lit2;
 	}
 
-	this(int n)
+	this(CRef n)
 	{
 		this.type = clause;
 		this.n = n;
@@ -66,7 +66,7 @@ final class Solver
 	Sat sat;
 	int varCount() const @property { return sat.varCount; }
 
-	Array!(Array!int) watches;
+	Array!(Array!CRef) watches;
 
 	Array!bool assign;
 	Array!Lit stack;
@@ -99,7 +99,7 @@ final class Solver
 			if(sat.renum[i] != -1)
 				activityHeap.push(i);
 
-		foreach(int i, ref c; sat.clauses)
+		foreach(i, ref c; sat.clauses)
 			if(c.length)
 			{
 				watches[c[0]].pushBack(i);
@@ -115,7 +115,7 @@ final class Solver
 	 */
 	Reason addClause(const Lit[] c)
 	{
-		int i = sat.addClause(c, false);
+		CRef i = sat.addClause(c, false);
 
 		switch(c.length)
 		{
@@ -129,7 +129,6 @@ final class Solver
 				return Reason(c[1]);
 
 			default:
-				assert(i >= 0);
 				watches[c[0]].pushBack(i);
 				watches[c[1]].pushBack(i);
 				return Reason(i);

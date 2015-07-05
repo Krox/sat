@@ -110,13 +110,13 @@ class varElim
 		foreach(i; sat.occs(pos))
 			if(sat.clauses[i].irred)
 				foreach(x; sat.bins(neg))
-					if(!sat.clauses[i].lits.containsValue(x.neg))
+					if(x.neg !in sat.clauses[i])
 						if(++score > 0)
 							return 1000;
 		foreach(i; sat.occs(neg))
 			if(sat.clauses[i].irred)
 				foreach(x; sat.bins(pos))
-					if(!sat.clauses[i].lits.containsValue(x.neg))
+					if(x.neg !in sat.clauses[i])
 						if(++score > 0)
 							return 1000;
 
@@ -133,28 +133,55 @@ class varElim
 	}
 
 	/** resolvent of a with b using the pivot l */
-	static Clause resolvent(ref Clause a, ref Clause b, Lit l)
+	static Lit[] resolvent(const Lit[] a, const Lit[] b, Lit l)
 	{
-		assert(a.irred && b.irred);
-		auto c = Array!Lit(a.lits[]);
-		c.pushBack(b.lits[]);
+		Array!Lit c;
+		c.resize(0);
+		c.pushBack(a);
+		c.pushBack(b);
 		sort(c[]);
+
 		Lit last = Lit.undef;
 		foreach(lit, ref bool rem; &c.prune)
 		{
-			rem = (lit==last || lit==l || lit==l.neg);
-			last = lit;
+			if(lit == last || lit == l || lit == l.neg)
+				rem = true;
+			else if(lit == last.neg)
+				return null;
+			else
+				last = lit;
 		}
 
-		return Clause(move(c), a.irred && b.irred);
+		return c[];
 	}
 
 	/** resolvent of a with the binary clause b,l using the pivot l */
-	static Clause resolvent(Clause a, Lit b, Lit l)
+	static Lit[] resolvent(const Lit[] a, Lit b, Lit l)
 	{
-		assert(a.irred);
-		a.replaceLiteral(l.neg, b);
-		return a;
+		Array!Lit c;
+		c.resize(0);
+		c.pushBack(a);
+		bool found = false;
+		for(int i = 0; i < c.length; ++i)
+		{
+			if(c[i] == b.neg)
+				return null;
+			else if(c[i] == l.neg)
+			{
+				assert(!found);
+				found = true;
+				c[i] = b;
+			}
+			else if(c[i] == b)
+			{
+				c[i] = c[$-1];
+				c.popBack();
+				--i;
+			}
+		}
+		assert(found);
+
+		return c[];
 	}
 
 	/** check whether a resolvent is tautological without actually computing it */
@@ -188,20 +215,32 @@ class varElim
 		foreach(i; sat.occs(pos))
 			if(sat.clauses[i].irred)
 				foreach(x; sat.bins(neg))
-					if(!sat.clauses[i].containsValue(x.neg))
-						sat.addClause(resolvent(sat.clauses[i], x, neg)[], true); // TODO: dont allocate the clause as temporary
+					if(x.neg !in sat.clauses[i])
+					{
+						auto r = resolvent(sat.clauses[i][], x, neg);
+						if(r !is null)
+							sat.addClause(r, true);
+					}
 		foreach(i; sat.occs(neg))
 			if(sat.clauses[i].irred)
 				foreach(x; sat.bins(pos))
-					if(!sat.clauses[i].containsValue(x.neg))
-						sat.addClause(resolvent(sat.clauses[i], x, pos)[], true);
+					if(x.neg !in sat.clauses[i])
+					{
+						auto r = resolvent(sat.clauses[i][], x, pos);
+						if(r !is null)
+							sat.addClause(r, true);
+					}
 
 		// add long-long resolvents
 		foreach(i; sat.occs(pos))
 			if(sat.clauses[i].irred)
 				foreach(j; sat.occs(neg))
 					if(sat.clauses[j].irred)
-						sat.addClause(resolvent(sat.clauses[i], sat.clauses[j], pos)[], true); // 'addClause' will not actually add tautologies
+					{
+						auto r = resolvent(sat.clauses[i][], sat.clauses[j][], pos);
+						if(r !is null)
+							sat.addClause(r, true);
+					}
 
 		auto ext = new Extender(sat.assign);
 
@@ -209,13 +248,13 @@ class varElim
 		foreach(i; sat.occs(pos))
 		{
 			if(sat.clauses[i].irred)
-				ext.clausesPos.pushBack(sat.clauses[i]);
+				ext.clausesPos.pushBack(Array!Lit(sat.clauses[i][]));
 			sat.removeClause(i);
 		}
 		foreach(i; sat.occs(neg))
 		{
 			if(sat.clauses[i].irred)
-				ext.clausesNeg.pushBack(sat.clauses[i]);
+				ext.clausesNeg.pushBack(Array!Lit(sat.clauses[i][]));
 			sat.removeClause(i);
 		}
 
@@ -248,8 +287,8 @@ class varElim
 final class Extender
 {
 	Assignment assign;
-	Array!Clause clausesPos; // clauses containing Lit(v, false)
-	Array!Clause clausesNeg; // clauses containing Lit(v, true)
+	Array!(Array!Lit) clausesPos; // clauses containing Lit(v, false)
+	Array!(Array!Lit) clausesNeg; // clauses containing Lit(v, true)
 	Array!Lit binsPos;
 	Array!Lit binsNeg;
 
