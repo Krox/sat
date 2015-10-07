@@ -3,5 +3,12 @@
 obj/*
 bin/*
 old/*
+
+*.pdf
+
 *.layout
 *.cbp
+
+cryptominisat
+test*
+sat-2002-beta
