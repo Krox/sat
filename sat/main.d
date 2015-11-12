@@ -18,7 +18,9 @@ import sat.stats;
 int main(string[] args)
 {
 	bool skipSolution = false;
-	getopt(args, "skipsolution|s", &skipSolution);
+	string solutionFilename;
+	getopt(args, "skipsolution|s", &skipSolution,
+	             "solution", &solutionFilename);
 
 	if(args.length != 2)
 	{
@@ -26,13 +28,28 @@ int main(string[] args)
 		return -1;
 	}
 
-	writefln("cnf file: %s", args[1]);
+	writefln("c cnf file: %s", args[1]);
 
 	Sat sat;
 	try
 	{
 		sat = readDimacs(args[1]);
-		writefln("read in %.2f s", Clock.currAppTick.msecs/1000.0f);
+		writefln("c read in %.2f s", Clock.currAppTick.msecs/1000.0f);
+
+		if(solutionFilename !is null)
+		{
+			auto sol = readSolution(solutionFilename, sat.varCount);
+			if(sat.checkSolution(sol))
+			{
+				writefln("c solution checked");
+				return 0;
+			}
+			else
+			{
+				writefln("INVALID SOLUTION");
+				return -1;
+			}
+		}
 
 		sat.writeStatsHeader();
 

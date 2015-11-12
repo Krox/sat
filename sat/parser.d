@@ -1,11 +1,14 @@
 module sat.parser;
 
-import jive.array;
 import std.file : read;
 import std.string : stripLeft;
 import std.algorithm : find, max;
 import std.math : abs;
 import std.stdio;
+
+import jive.array;
+import jive.bitarray;
+
 import sat.sat;
 
 /** same as std.conv.parse!int but faster (and probably less general) */
@@ -60,7 +63,7 @@ Sat readDimacs(string filename)
 	int varCount = parseInt(buf);
 	buf = stripLeft(buf);
 	int clauseCount = parseInt(buf);
-	writefln("header says %s vars and %s clauses", varCount, clauseCount);
+	writefln("c header says %s vars and %s clauses", varCount, clauseCount);
 
 	auto sat = new Sat(varCount);
 
@@ -83,4 +86,32 @@ Sat readDimacs(string filename)
 	}
 
 	return sat;
+}
+
+BitArray readSolution(string filename, int varCount)
+{
+	// read the file (without UTF validation to save time)
+	auto buf = cast(string)read(filename);
+
+	buf = skipComments(buf);
+	if(buf[0..13] != "s SATISFIABLE")
+		throw new Exception("solution with invalid 's' line");
+	buf = buf[13..$];
+	buf = skipComments(buf);
+
+	auto sol = BitArray(varCount*2);
+
+	if(buf[0] != 'v')
+		throw new Exception("no 'v' line in solution");
+	buf = buf[1..$];
+
+	for(int i = 0; i < varCount; ++i)
+	{
+		buf = stripLeft(buf);
+		auto x = Lit.fromDimacs(parseInt(buf));
+		assert(x.var == i);
+		sol[x] = true;
+	}
+
+	return sol;
 }

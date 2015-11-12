@@ -9,6 +9,7 @@ private import std.conv : to;
 private import std.algorithm : map;
 
 import jive.array;
+import jive.bitarray;
 import jive.lazyarray;
 import jive.queue;
 
@@ -140,6 +141,20 @@ final class Sat
 					newVarData[trans[i].var].flip;
 			}
 
+		// new bin content
+		foreach(i, ref list; bins)
+			foreach(ref x, ref bool rem; &list.prune)
+			{
+				x = trans[x.var]^x.sign;
+				if(x == Lit.one)
+					rem = true;
+				if(x == Lit.zero)
+				{
+					units.pushBack(Lit(cast(int)i));
+					rem = true;
+				}
+			}
+
 		// new bin-arrays
 		auto newBins = Array!(Array!Lit)(newVarCount*2);
 		for(int i = 0; i < varCount; ++i)
@@ -159,18 +174,7 @@ final class Sat
 					newBins[trans[i]^true].pushBack(bins[Lit(i,true)][]);
 			}
 		}
-
-		// new bin content
 		bins = move(newBins);
-		foreach(ref list; bins)
-			foreach(ref x, ref bool rem; &list.prune)
-			{
-				x = trans[x.var]^x.sign;
-				if(x == Lit.one)
-					rem = true;
-				if(x == Lit.zero)
-					assert(false); // not a bug
-			}
 
 		// renumber units (after binary in order to renumber freshly propagated units)
 		foreach(ref x, ref bool rem; &units.prune)
@@ -245,15 +249,40 @@ final class Sat
 
 		// long clauses
 		foreach(ref c; clauses)
-			if(c.length)
-				writefln("%s 0", c.toString);
+			writefln("%s 0", c.toString);
+	}
+
+	bool checkSolution(ref const BitArray sol)
+	{
+		foreach(x; units)
+			if(!sol[x])
+				return false;
+
+		for(int i = 0; i < varCount*2; ++i)
+		{
+			if(sol[Lit(i)])
+				continue;
+			foreach(x; bins[Lit(i)])
+				if(!sol[x])
+					return false;
+		}
+
+		outer: foreach(ref c; clauses)
+		{
+			foreach(x; c[])
+				if(sol[x])
+					continue outer;
+			return false;
+		}
+
+		return true;
 	}
 
 	void writeStatsHeader()
 	{
-		writefln("╔═════════╤═══════════════════╤═══════════════╤═══════════════╗");
-		writefln("║    vars │   binary  ternary │     long  len │   learnt  len ║");
-		writefln("╟─────────┼───────────────────┼───────────────┼───────────────╢");
+		writefln("c ╔═════════╤═══════════════════╤═══════════════╤═══════════════╗");
+		writefln("c ║    vars │   binary  ternary │     long  len │   learnt  len ║");
+		writefln("c ╟─────────┼───────────────────┼───────────────┼───────────────╢");
 	}
 
 	void writeStatsLine()
@@ -284,11 +313,11 @@ final class Sat
 				}
 			}
 
-		writefln("║ %#7s │ %#8s %#8s │ %#8s %#4.1f │ %#8s %#4.1f ║", varCount, nBin, nTer, nLong, cast(float)nLitsLong/nLong, nLearnt, cast(float)nLitsLearnt/nLearnt);
+		writefln("c ║ %#7s │ %#8s %#8s │ %#8s %#4.1f │ %#8s %#4.1f ║", varCount, nBin, nTer, nLong, cast(float)nLitsLong/nLong, nLearnt, cast(float)nLitsLearnt/nLearnt);
 	}
 
 	void writeStatsFooter()
 	{
-		writefln("╚═════════╧═══════════════════╧═══════════════╧═══════════════╝");
+		writefln("c ╚═════════╧═══════════════════╧═══════════════╧═══════════════╝");
 	}
 }
