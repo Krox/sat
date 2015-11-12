@@ -141,7 +141,7 @@ final class Sat
 					newVarData[trans[i].var].flip;
 			}
 
-		// new bin content
+		// new bin content (may lead to old units)
 		foreach(i, ref list; bins)
 			foreach(ref x, ref bool rem; &list.prune)
 			{
@@ -155,7 +155,17 @@ final class Sat
 				}
 			}
 
-		// new bin-arrays
+		// renumber units
+		foreach(ref x, ref bool rem; &units.prune)
+		{
+			x = trans[x.var]^x.sign;
+			if(x == Lit.one)
+				rem = true;
+			if(x == Lit.zero)
+				throw new Unsat;
+		}
+
+		// new bin-arrays (may lead to new units)
 		auto newBins = Array!(Array!Lit)(newVarCount*2);
 		for(int i = 0; i < varCount; ++i)
 		{
@@ -175,16 +185,6 @@ final class Sat
 			}
 		}
 		bins = move(newBins);
-
-		// renumber units (after binary in order to renumber freshly propagated units)
-		foreach(ref x, ref bool rem; &units.prune)
-		{
-			x = trans[x.var]^x.sign;
-			if(x == Lit.one)
-				rem = true;
-			if(x == Lit.zero)
-				throw new Unsat;
-		}
 
 		// renumber long clauses
 		outer: foreach(ref c; clauses)
