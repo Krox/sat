@@ -8,6 +8,16 @@ import jive.array;
 import sat.sat, sat.parser, sat.solver, sat.twosat;
 import sat.stats;
 
+private import core.bitop: bsr, popcnt;
+
+int luby(int i)
+{
+	if(popcnt(i+1) == 1)
+		return (i+1)/2;
+	else
+		return luby(i-(1<<bsr(i))+1);
+}
+
 /**
  * returns:
  *     10 if solution was found
@@ -53,20 +63,31 @@ int main(string[] args)
 
 		sat.writeStatsHeader();
 
-		while(true)
+		Solver solver = null;
+		for(int i = 1; ; ++i)
 		{
-			new TwoSat(sat).run();
+			// 2-sat is cheap, solver restart is expensive, so run it whenever the solver is down anyway
+			if(solver is null)
+				new TwoSat(sat).run();
 
+			// run the solver
+			if(solver is null)
+				solver = new Solver(sat);
 			sat.writeStatsLine();
-			bool solved = new Solver(sat).run(1000);
-
-			if(solved || sat.units.length >= 100)
-				sat.cleanup;
+			bool solved = solver.run(luby(i)*100);
 
 			if(solved)
 			{
+				delete solver;
+				sat.cleanup;
 				assert(sat.varCount == 0);
 				break;
+			}
+
+			if(sat.units.length >= 100)
+			{
+				delete solver;
+				sat.cleanup;
 			}
 		}
 
