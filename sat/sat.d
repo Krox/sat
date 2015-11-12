@@ -13,6 +13,7 @@ import jive.bitarray;
 import jive.lazyarray;
 import jive.queue;
 
+import sat.stats;
 public import sat.assignment;
 public import sat.clause;
 
@@ -31,7 +32,7 @@ final class Sat
 	{
 		double activity = 0;
 		bool polarity;
-		Lit label; // label for outside
+		Lit label = Lit.undef; // label for outside
 
 		void flip()
 		{
@@ -83,6 +84,11 @@ final class Sat
 		}
 	}
 
+	Lit toOuter(Lit l) const
+	{
+		return varData[l.var].label^l.sign;
+	}
+
 	/**
 	 *  add clause
 	 *  assumes/asserts clause is syntactically well-formed (no duplicate variable)
@@ -95,7 +101,7 @@ final class Sat
 
 		// NOTE: do not sort the clause: c[0], c[1] might be there for a reason.
 
-		// check its is well formed
+		// check it is well formed
 		for(int i = 0; i < c.length; ++i)
 			for(int j = i+1; j < c.length; ++j)
 				assert(c[i].var != c[j].var);
@@ -109,7 +115,7 @@ final class Sat
 			default: break;
 		}
 
-		return clauses.add(c, irred);
+		return clauses.addClause(c, irred);
 	}
 
 	/** ditto */
@@ -129,31 +135,12 @@ final class Sat
 	}
 
 	/** renumber according to trans, which should map old-var to new-lit */
-	void renumber(const Lit[] trans, int newVarCount)
+	void renumber(const Lit[] trans, int newVarCount, bool hasDups)
 	{
-		// new varData-array
-		auto newVarData = Array!VarData(newVarCount);
-		for(int i = 0; i < varCount; ++i)
-			if(!trans[i].fixed)
-			{
-				newVarData[trans[i].var] = varData[i];
-				if(trans[i].sign)
-					newVarData[trans[i].var].flip;
-			}
-
-		// new bin content (may lead to old units)
-		foreach(i, ref list; bins)
-			foreach(ref x, ref bool rem; &list.prune)
-			{
-				x = trans[x.var]^x.sign;
-				if(x == Lit.one)
-					rem = true;
-				if(x == Lit.zero)
-				{
-					units.pushBack(Lit(cast(int)i));
-					rem = true;
-				}
-			}
+		// check input
+		assert(trans.length == varCount);
+		foreach(x; trans)
+			assert(x.fixed || (x.proper && x.var < newVarCount));
 
 		// renumber units
 		foreach(ref x, ref bool rem; &units.prune)
@@ -161,27 +148,43 @@ final class Sat
 			x = trans[x.var]^x.sign;
 			if(x == Lit.one)
 				rem = true;
-			if(x == Lit.zero)
+			else if(x == Lit.zero)
 				throw new Unsat;
+			else assert(x.proper);
 		}
 
-		// new bin-arrays (may lead to new units)
+		// new bin content (may lead to units already in new name)
 		auto newBins = Array!(Array!Lit)(newVarCount*2);
-		for(int i = 0; i < varCount; ++i)
+		foreach(i, ref list; bins)
 		{
-			if(trans[i].fixed)
-				units.pushBack(bins[Lit(i, trans[i].sign).neg][]);
+			Lit a = trans[Lit(cast(int)i).var]^Lit(cast(int)i).sign; // new name for Literal i
+
+			if(a == Lit.one) // satisfied -> nothing to be done
+				continue;
+
+			// translate the list
+			foreach(ref x, ref bool rem; &list.prune)
+			{
+				x = trans[x.var]^x.sign;
+				if(x == Lit.one || x == a.neg) // (a or 1), (a or -a)
+					rem = true;
+				else if(x == Lit.zero || x == a) // (a or a), (a or 0)
+				{
+					if(a == Lit.zero)
+						throw new Unsat;
+
+					units.pushBack(a);
+					rem = true;
+				}
+				else assert(x.proper);
+			}
+
+			if(a == Lit.zero)
+				units.pushBack(list[]);
 			else
 			{
-				if(newBins[trans[i]^false].empty)
-					newBins[trans[i]^false] = move(bins[Lit(i,false)]);
-				else
-					newBins[trans[i]^false].pushBack(bins[Lit(i,false)][]);
-
-				if(newBins[trans[i]^true].empty)
-					newBins[trans[i]^true] = move(bins[Lit(i,true)]);
-				else
-					newBins[trans[i]^true].pushBack(bins[Lit(i,true)][]);
+				assert(a.proper);
+				newBins[a].pushBack(list[]);
 			}
 		}
 		bins = move(newBins);
@@ -205,6 +208,13 @@ final class Sat
 				}
 			}
 
+			if(hasDups)
+			{
+				c.normalize();
+				if(c.removed)
+					continue outer;
+			}
+
 			if(c.length <= 2)
 			{
 				addClause(c[], c.irred);
@@ -212,7 +222,24 @@ final class Sat
 			}
 		}
 
-		varData = move(newVarData); // this changes varCount, so do it last
+		// new varData-array (this changes varCount, so do it last)
+		auto newVarData = Array!VarData(newVarCount);
+		for(int i = 0; i < varCount; ++i)
+			if(!trans[i].fixed)
+			{
+				// already has a new name -> skip
+				// (so that the new variable will have the label of the lowest
+				//  old variable. Important to be consistent with the
+				//  equivalences that twosat puts into the assignment)
+				if(newVarData[trans[i].var].label != Lit.undef)
+					continue;
+
+				newVarData[trans[i].var] = varData[i];
+				if(trans[i].sign)
+					newVarData[trans[i].var].flip;
+			}
+		varData = move(newVarData);
+
 	}
 
 	void cleanup()
@@ -220,10 +247,15 @@ final class Sat
 		if(units.empty)
 			return;
 
+		swCleanup.start();
+		scope(exit)
+			swCleanup.stop();
+
 		auto trans = Array!Lit(varCount, Lit.undef);
+
 		foreach(x; units)
 		{
-			assign.setLiteral(varData[x.var].label^x.sign); // throws on contradicting units
+			assign.setLiteral(toOuter(x)); // throws on contradicting units
 			trans[x.var] = Lit.one^x.sign;
 		}
 
@@ -232,7 +264,7 @@ final class Sat
 			if(trans[i] == Lit.undef)
 				trans[i] = Lit(count++, false);
 
-		renumber(trans[], count);
+		renumber(trans[], count, false);
 	}
 
 	void dump()

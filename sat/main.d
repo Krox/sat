@@ -5,7 +5,7 @@ import std.getopt;
 import std.datetime : Clock;
 import jive.array;
 
-import sat.sat, sat.parser, sat.solver;
+import sat.sat, sat.parser, sat.solver, sat.twosat;
 import sat.stats;
 
 /**
@@ -55,6 +55,8 @@ int main(string[] args)
 
 		while(true)
 		{
+			new TwoSat(sat).run();
+
 			sat.writeStatsLine();
 			bool solved = new Solver(sat).run(1000);
 
@@ -74,6 +76,7 @@ int main(string[] args)
 
 		writefln("s SATISFIABLE");
 
+		sat.assign.extend();
 		if(!skipSolution)
 			sat.assign.print();
 

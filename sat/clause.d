@@ -71,6 +71,27 @@ struct Clause
 		return false;
 	}
 
+	/** removes duplicate literals and marks tautology as removed */
+	void normalize()
+	{
+		outer: for(int i = 0; i < length; ++i)
+			for(int j = 0; j < i; ++j)
+			{
+				if(this[i] == this[j])
+				{
+					this[i] = this[$-1];
+					length--;
+					i--;
+					continue outer;
+				}
+				else if(this[i] == this[j].neg)
+				{
+					this.remove();
+					return;
+				}
+			}
+	}
+
 	/**
 	 * replace literal a by b in this clause (both a and b have to b proper literals)
 	 *   - assumes/asserts that a is contained and b.neg is not contained
@@ -160,12 +181,23 @@ final class ClauseStorage
 		return *cast(Clause*)ptr;
 	}
 
-	CRef add(const Lit[] lits, bool irred)
+	CRef addClause(const Lit[] lits, bool irred)
 	{
 		auto r = CRef(cast(int)store.length);
 		auto header = Clause(lits.length, irred);
 		store.pushBack(Lit(*cast(int*)&header));
 		store.pushBack(lits);
+		clauses.pushBack(r);
+		return r;
+	}
+
+	CRef addBinary(Lit a, Lit b, bool irred)
+	{
+		auto r = CRef(cast(int)store.length);
+		auto header = Clause(2, irred);
+		store.pushBack(Lit(*cast(int*)&header));
+		store.pushBack(a);
+		store.pushBack(b);
 		clauses.pushBack(r);
 		return r;
 	}
@@ -184,6 +216,26 @@ final class ClauseStorage
 	{
 		int r;
 		foreach(i; clauses)
+			if(!this[i].removed)
+				if((r = dg(this[i])) != 0)
+					return r;
+		return 0;
+	}
+
+	int opApplyReverse(int delegate(CRef, ref Clause) dg)
+	{
+		int r;
+		foreach_reverse(i; clauses)
+			if(!this[i].removed)
+				if((r = dg(i, this[i])) != 0)
+					return r;
+		return 0;
+	}
+
+	int opApplyReverse(int delegate(ref Clause) dg)
+	{
+		int r;
+		foreach_reverse(i; clauses)
 			if(!this[i].removed)
 				if((r = dg(this[i])) != 0)
 					return r;

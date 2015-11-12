@@ -3,7 +3,7 @@ module sat.stats;
 import std.stdio;
 import std.datetime : Clock, StopWatch;
 
-StopWatch swTarjan, swSubsume, swSubsumeBinary, swXor, swSolver, swVarElim;
+StopWatch swTarjan, swSubsume, swSubsumeBinary, swXor, swSolver, swVarElim, swCleanup, swSolverStartup;
 
 void writeStats()
 {
@@ -14,6 +14,8 @@ void writeStats()
 	writefln("c subsume    %#6.2f s (%#4.1f %%)", swSubsume.peek.msecs/1000.0f, 100f*swSubsume.peek.msecs/total.msecs);
 	writefln("c subsumeBin %#6.2f s (%#4.1f %%)", swSubsumeBinary.peek.msecs/1000.0f, 100f*swSubsumeBinary.peek.msecs/total.msecs);
 	writefln("c varElim    %#6.2f s (%#4.1f %%)", swVarElim.peek.msecs/1000.0f, 100f*swVarElim.peek.msecs/total.msecs);
+	writefln("c cleanup    %#6.2f s (%#4.1f %%)", swCleanup.peek.msecs/1000.0f, 100f*swCleanup.peek.msecs/total.msecs);
+	writefln("c solverInit %#6.2f s (%#4.1f %%)", swSolverStartup.peek.msecs/1000.0f, 100f*swSolverStartup.peek.msecs/total.msecs);
 	writefln("c solver     %#6.2f s (%#4.1f %%)", swSolver.peek.msecs/1000.0f, 100f*swSolver.peek.msecs/total.msecs);
 	writefln("c total      %#6.2f s", total.msecs/1000.0f);
 }

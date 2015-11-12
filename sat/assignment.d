@@ -3,6 +3,8 @@ module sat.assignment;
 private import std.stdio;
 private import jive.array;
 
+import sat.clause;
+
 struct Lit
 {
 	uint toInt;
@@ -107,13 +109,15 @@ class Unsat : Exception
 
 final class Assignment
 {
-	private Array!Lit assign; // undef / fixed
+	private Array!Lit assign; // undef / elim / fixed
+	private ClauseStorage extension;
 
 	int varCount() const @property { return cast(int)assign.length; }
 
 	this(int n)
 	{
 		assign.resize(n, Lit.undef);
+		extension = new ClauseStorage;
 	}
 
 	/** return false, if the literal was already set */
@@ -128,6 +132,27 @@ final class Assignment
 
 		assign[l.var] = Lit.one^l.sign;
 		return true;
+	}
+
+	/** eliminate a by setting it equivalent to b */
+	void setEquivalence(Lit a, Lit b)
+	{
+		assert(assign[a.var] == Lit.undef);
+		assign[a.var] = Lit.elim;
+		extension.addBinary(a, b.neg, true);
+		extension.addBinary(a.neg, b, true);
+	}
+
+	void extend()
+	{
+		foreach_reverse(ref c; extension)
+		{
+			if(!isSatisfied(c[]))
+			{
+				assert(assign[c[0].var] == Lit.elim);
+				assign[c[0].var] = Lit.one^c[0].sign;
+			}
+		}
 	}
 
 	void print() const

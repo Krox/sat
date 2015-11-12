@@ -85,6 +85,10 @@ final class Solver
 
 	this(Sat sat)
 	{
+		swSolverStartup.start();
+		scope(exit)
+			swSolverStartup.stop();
+
 		this.sat = sat;
 		assert(varCount > 0);
 
