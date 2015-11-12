@@ -2,7 +2,8 @@ module sat.clause;
 
 import std.algorithm : join, swap, map, sort;
 import jive.array;
-import sat.assignment : Lit;
+
+import sat.assignment;
 
 struct Clause
 {
@@ -12,13 +13,16 @@ struct Clause
 
 	enum FLAG_IRRED = 1;
 	enum FLAG_MARKED = 2;
+	enum FLAG_REMOVED = 4;
 
 	bool irred() const @property { return (flags & FLAG_IRRED) != 0; }
 	bool marked() const @property { return (flags & FLAG_MARKED) != 0; }
+	bool removed() const @property { return (flags & FLAG_REMOVED) != 0; }
 	void makeIrred() { flags |= FLAG_IRRED; }
 	void makeRed() { flags &= ~FLAG_IRRED; }
 	void mark() { flags |= FLAG_MARKED; }
 	void unmark() { flags &= ~FLAG_MARKED; }
+	void remove() { flags |= FLAG_REMOVED; }
 
 	@disable this(this) {}
 
@@ -104,6 +108,7 @@ struct Clause
 		return !shorten;
 	}
 
+	/** remove a literal from a clause. Assumes/asserts that it was in */
 	void removeLiteral(Lit a)
 	{
 		foreach(ref Lit l; this[])
@@ -135,8 +140,6 @@ struct CRef
 	}
 
 	enum CRef undef = CRef(-1);
-	enum CRef taut = CRef(-2);	// tautological clause
-	enum CRef implicit = CRef(-3); // implicit clause (i.e. binary/ternary which is stored directly inside watchlists or so)
 }
 
 final class ClauseStorage
@@ -171,7 +174,7 @@ final class ClauseStorage
 	{
 		int r;
 		foreach(i; clauses)
-			if(this[i].length)
+			if(!this[i].removed)
 				if((r = dg(i, this[i])) != 0)
 					return r;
 		return 0;
@@ -181,7 +184,7 @@ final class ClauseStorage
 	{
 		int r;
 		foreach(i; clauses)
-			if(this[i].length)
+			if(!this[i].removed)
 				if((r = dg(this[i])) != 0)
 					return r;
 		return 0;

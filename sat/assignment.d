@@ -107,46 +107,13 @@ class Unsat : Exception
 
 final class Assignment
 {
-	private Array!Lit assign; // undef / elim / fixed
-	private Array!Lit equ;
-
-	private Array!(Lit delegate()) extensionDelegate; // null for equivalences
-	private Array!int extensionVariable;
+	private Array!Lit assign; // undef / fixed
 
 	int varCount() const @property { return cast(int)assign.length; }
 
 	this(int n)
 	{
 		assign.resize(n, Lit.undef);
-		equ.resize(n, Lit.undef);
-	}
-
-	/** Lit.zero/one/undef/elim */
-	Lit opIndex(Lit l)
-	{
-		if(!l.proper)
-			return l;
-		if(assign[l.var].fixed)
-			return assign[l.var]^l.sign;
-		else
-			return assign[l.var];
-	}
-
-	void eliminateVariable(int v, Lit delegate() dg)
-	{
-		assert(assign[v] == Lit.undef);
-		assign[v] = Lit.elim;
-		extensionDelegate.pushBack(dg);
-		extensionVariable.pushBack(v);
-	}
-
-	void setEquivalence(Lit lit, Lit base)
-	{
-		assert(equ[lit.var] == Lit.undef);
-		equ[lit.var] = base^lit.sign;
-		assign[lit.var] = Lit.elim;
-		extensionDelegate.pushBack(null);
-		extensionVariable.pushBack(lit.var);
 	}
 
 	/** return false, if the literal was already set */
@@ -163,33 +130,7 @@ final class Assignment
 		return true;
 	}
 
-	void extend()
-	{
-		while(!extensionVariable.empty)
-		{
-			int v = extensionVariable.popBack;
-			auto dg = extensionDelegate.popBack;
-
-			assert(assign[v] == Lit.elim);
-
-			if(dg is null) // equivalence
-				assign[v] = assign[equ[v].var]^equ[v].sign;
-			else // non-trivial extension
-				assign[v] = dg();
-
-			assert(assign[v].fixed);
-		}
-	}
-
-	bool complete() const
-	{
-		for(int i = 0; i < varCount; ++i)
-			if(assign[i] == Lit.undef)
-				return false;
-		return true;
-	}
-
-	void writeAssignment() const
+	void print() const
 	{
 		writef("v");
 		for(int i = 0; i < varCount; ++i)

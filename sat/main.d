@@ -5,8 +5,7 @@ import std.getopt;
 import std.datetime : Clock;
 import jive.array;
 
-import sat.sat, sat.parser, sat.solver, sat.xor, sat.twosat, sat.simplify;
-import sat.varelim;
+import sat.sat, sat.parser, sat.solver;
 import sat.stats;
 
 /**
@@ -27,50 +26,29 @@ int main(string[] args)
 		return -1;
 	}
 
-	int varCount;
-	Array!Lit unary;
-	Array!Pair binary;
-	Array!Triple ternary;
-	Array!(Array!Lit) clauses;
-
 	writefln("cnf file: %s", args[1]);
-	readDimacs(args[1], varCount, unary, binary, ternary, clauses);
-	writefln("read %s / %s / %s / %s clauses in %.2f s", unary.length, binary.length, ternary.length, clauses.length, Clock.currAppTick.msecs/1000.0f);
 
-	auto sat = new Sat(varCount);
-
+	Sat sat;
 	try
 	{
-		foreach(c; unary)
-			sat.addUnary(c);
-		foreach(c; binary)
-			sat.addBinary(c.a, c.b);
-		foreach(c; ternary)
-			sat.addTernary(c.a, c.b, c.c);
-		foreach(ref c; clauses)
-			sat.addClause(c[], true);
-		sat.propagate(); // propagate units clauses in cnf
+		sat = readDimacs(args[1]);
+		writefln("read in %.2f s", Clock.currAppTick.msecs/1000.0f);
 
 		sat.writeStatsHeader();
 
-		while(!sat.assign.complete)
+		while(true)
 		{
-			solve2sat(sat);
-
-			simplify(sat);
-
-			solve2sat(sat);
-
-			solveXor(sat);
-
-			varElim(sat);
-
-			sat.cleanup();
-
-			new Solver(sat).run(1000);
-			int nProps = sat.propagate(); // propagate learnt unit clauses
-
 			sat.writeStatsLine();
+			bool solved = new Solver(sat).run(1000);
+
+			if(solved || sat.units.length >= 100)
+				sat.cleanup;
+
+			if(solved)
+			{
+				assert(sat.varCount == 0);
+				break;
+			}
 		}
 
 		sat.writeStatsFooter();
@@ -79,23 +57,8 @@ int main(string[] args)
 
 		writefln("s SATISFIABLE");
 
-		sat.assign.extend();
-
 		if(!skipSolution)
-			sat.assign.writeAssignment();
-
-		foreach(c; unary)
-			if(!sat.assign.isSatisfied(c))
-				throw new Exception("FINAL TEST FAIL");
-		foreach(c; binary)
-			if(!sat.assign.isSatisfied(c.a, c.b))
-				throw new Exception("FINAL TEST FAIL");
-		foreach(c; ternary)
-			if(!sat.assign.isSatisfied(c.a, c.b, c.c))
-				throw new Exception("FINAL TEST FAIL");
-		foreach(ref c; clauses)
-			if(!sat.assign.isSatisfied(c[]))
-				throw new Exception("FINAL TEST FAIL");
+			sat.assign.print();
 
 		return 10;
 	}

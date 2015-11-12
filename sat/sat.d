@@ -12,371 +12,80 @@ import jive.array;
 import jive.lazyarray;
 import jive.queue;
 
-public import sat.assignment, sat.clause;
+public import sat.assignment;
+public import sat.clause;
 
-
+/**
+ *  - implicit unary and binary clauses
+ *  - no occ-lists, watch-lists
+ *  - no unit propagation !
+ *  - variable meta-data (activity, polarity)
+ */
 final class Sat
 {
-	Assignment assign;
-	int varCount() const @property { return cast(int)renum.length; }
+	// activity / polarity is not actually used in this module,
+	// but it needs to be persistent between solver restarts, so it is
+	// stored here.
+	static struct VarData
+	{
+		double activity = 0;
+		bool polarity;
+		Lit label; // label for outside
 
-	ClauseStorage clauses;		// length=0 means clause was removed
-	private Array!(Array!CRef) occList;	// can contain clauses from which the literal was removed (or the clause itself can be removed). Also duplicates are possible.
-	Array!int occCountIrred;
-	Array!int occCountRed;
+		void flip()
+		{
+			polarity = !polarity;
+			label = label.neg;
+		}
+	}
+	Array!VarData varData;
 
-	private Array!(Array!Lit) binaryClauses;	// binary clauses. NOTE: can sometimes be asymmetric
-	Array!bool binaryDirty;		// indicates that a binary-list may contain removed/fixed variables
-	Array!bool binaryNew;	// indicates that there are new binary clauses, on which tarjan has not run yet
-	bool binaryAnyNew = false;
-
-	static struct Propagation { Lit a; Lit b; } // replace literal a with b (a is proper, b can be proper or Lit.one)
-	Queue!Propagation prop;		// propagation queue
-
-	bool varRemoved = false;	// indicates whether a variable/clause was removed since the last run of cleanup()
-	bool clauseRemoved = false;
-
-	Array!int renum; // inner -> outer
-
-	Array!double activity;
 	double activityInc = 1;
 
-	Array!bool polarity;
+	Assignment assign;
+
+	// clauses
+	Array!Lit units; // unit clauses
+	Array!(Array!Lit) bins; // binary clauses
+	ClauseStorage clauses; // len >= 3 clauses
 
 	this(int varCount)
 	{
-		renum.resize(varCount);
-		for(int i = 0; i < varCount; ++i)
-			renum[i] = i;
-
 		clauses = new ClauseStorage;
 		assign = new Assignment(varCount);
-		rebuildOccLists();
-		binaryClauses.resize(varCount*2);
-		binaryDirty.resize(varCount*2);
-		binaryNew.resize(varCount*2);
-		activity.resize(varCount, 0);
-		polarity.resize(varCount, false);
-	}
-
-	CRef[] occs(Lit lit)
-	{
-		if(occCount(lit) != occList[lit].length) // the list is dirty, clean it up before returning it
-		{
-			sort!"cast(int)a < cast(int)b"(occList[lit][]);
-			CRef last = CRef.undef;
-			foreach(CRef k, ref bool rem; &occList[lit].prune)
-			{
-				rem = (lit !in clauses[k]) || (k == last);
-				last = k;
-			}
-		}
-
-		assert(occCount(lit) == occList[lit].length, "corrupt occCount. lit = "~to!string(lit));
-		return occList[lit][];
-	}
-
-	/** same as occs(lit).length, but faster */
-	size_t occCount(Lit lit) const
-	{
-		return occCountIrred[lit] + occCountRed[lit];
-	}
-
-	void rebuildOccLists()
-	{
-		occList.resize(varCount*2);
-		foreach(ref list; occList)
-			list.resize(0);
-		occCountIrred.resize(varCount*2);
-		occCountRed.resize(varCount*2);
-		occCountIrred[] = 0;
-		occCountRed[] = 0;
-
-		foreach(i, ref c; clauses)
-			foreach(l; c[])
-			{
-				occList[l].pushBack(i);
-				if(c.irred)
-					occCountIrred[l]++;
-				else
-					occCountRed[l]++;
-			}
-	}
-
-	/** put a clause into the appropriate occ lists */
-	void attachClause(CRef i)
-	{
-		if(i == CRef.taut) // dont attach tautologies (which dont actually exist as clause anyway)
-			return;
-
-		assert(clauses[i].length, "tried to attach a removed clause");
-
-		bool irred = clauses[i].irred;
-		foreach(x; clauses[i][])
-		{
-			occList[x].pushBack(i);
-			if(irred)
-				occCountIrred[x]++;
-			else
-				occCountRed[x]++;
-		}
-	}
-
-	/** (lazily) remove a clause from its occ lists */
-	void detachClause(CRef i)
-	{
-		bool irred = clauses[i].irred;
-		foreach(l; clauses[i][])
-			if(irred)
-				occCountIrred[l]--;
-			else
-				occCountRed[l]--;
-	}
-
-	ref Array!Lit bins(Lit lit)
-	{
-		// clean up if neccessary
-		if(binaryDirty[lit])
-		{
-			sort(binaryClauses[lit][]);
-			Lit last = Lit.undef;
-			foreach(x, ref bool rem; &binaryClauses[lit].prune)
-			{
-				rem = binaryClauses[x].empty || x == last;
-				last = x;
-			}
-			binaryDirty[lit] = false;
-		}
-
-		return binaryClauses[lit];
-	}
-
-	Lit toOuter(Lit l)
-	{
-		return Lit(renum[l.var], l.sign);
-	}
-
-	/** need to call rebuildOccLists() after renumber() */
-	void renumber()
-	{
-		auto trans = Array!int(varCount, -1); // old -> new
-		int count = 0;
+		varData.resize(varCount);
+		bins.resize(varCount*2);
 		for(int i = 0; i < varCount; ++i)
-			if(assign[Lit(renum[i], false)] == Lit.undef)
-				trans[i] = count++;
+			varData[i].label = Lit(i, false);
+	}
 
-		assert(prop.empty);
-		for(int i = 0; i < varCount*2; ++i)
-			foreach(ref l; bins(Lit(i))) // NOTE: bins(..) makes sure all lazy-removed is gone
-				l = Lit(trans[l.var], l.sign);
-		foreach(i, ref c; clauses)
-			foreach(ref l; c)
-				l = Lit(trans[l.var], l.sign);
-
-		foreach(i, ref list, ref bool rem; &binaryClauses.prune)
-			if(trans[Lit(cast(int)i).var] == -1)
-				rem = true;
-
-		foreach(i, x, ref bool rem; &renum.prune)
-			if(trans[i] == -1)
-				rem = true;
-
-		foreach(i, x, ref bool rem; &activity.prune)
-			if(trans[i] == -1)
-				rem = true;
-
-		foreach(i, x, ref bool rem; &polarity.prune)
-			if(trans[i] == -1)
-				rem = true;
+	int varCount() const @property
+	{
+		return cast(int)varData.length;
 	}
 
 	void bumpVariableActivity(int v)
 	{
-		activity[v] += activityInc;
+		varData[v].activity += activityInc;
 	}
 
-	void decayVariableActivity()
+	void decayVariableActivity(double factor = 1.05)
 	{
-		activityInc *= 1.05;
+		activityInc *= factor;
+
+		// scale everything down if neccessary
 		if(activityInc > 1e100)
 		{
 			activityInc /= 1e100;
-			activity[][] /= 1e100;
+			for(int i = 0; i < varCount; ++i)
+				varData[i].activity /= 1e100;
 		}
-	}
-
-	/** renumber variables and make new occ-lists */
-	void cleanup()
-	{
-		if(propagate())
-			writefln("c WARNING: not fully propagated before cleanup"); // no problem, just a question of style
-
-		/+if(clauseRemoved)
-			foreach(ref c, ref bool rem; &clauses.prune)
-				if(c.length == 0)
-					rem = true;+/
-
-		if(varRemoved)
-			renumber();
-
-		if(clauseRemoved || varRemoved)
-			rebuildOccLists();
-
-		clauseRemoved = false;
-		varRemoved = false;
-	}
-
-	/** replace a by b */
-	void setEquivalence(Lit a, Lit b)
-	{
-		assert(a.proper && b.proper);
-		assign.setEquivalence(toOuter(a), toOuter(b));
-		prop.push(Propagation(a, b));
-	}
-
-	/** returns number of vars propagated */
-	uint propagate()
-	{
-		uint count = 0;
-
-		while(!prop.empty)
-		{
-			++count;
-			auto p = prop.pop();
-
-			assert(renum[p.a.var] != -1 && assign[toOuter(p.a)] != Lit.undef, "tried to propagate a variable that is already fixed/eliminated");
-
-			if(p.b == Lit.one) // fix literal p.a
-			{
-				foreach(lit; bins(p.a.neg))
-					addUnary(lit);
-
-				foreach(k; occs(p.a))
-					removeClause(k);
-				foreach(k; occs(p.a.neg))
-					removeLiteral(k, p.a.neg);
-			}
-			else // replace literal p.a with p.b
-			{
-				assert(p.b.proper);
-
-				foreach(lit; bins(p.a))
-					addBinary(p.b, lit);
-				foreach(lit; bins(p.a.neg))
-					addBinary(p.b.neg, lit);
-
-				foreach(i; occs(p.a))
-					replaceLiteral(i, p.a, p.b);
-				foreach(i; occs(p.a.neg))
-					replaceLiteral(i, p.a.neg, p.b.neg);
-			}
-
-			assert(occs(p.a).length == 0);
-			assert(occs(p.a.neg).length == 0);
-
-			foreach(lit; bins(p.a))
-				binaryDirty[lit] = true;
-			foreach(lit; bins(p.a.neg))
-				binaryDirty[lit] = true;
-
-			binaryClauses[p.a].resize(0);
-			binaryClauses[p.a.neg].resize(0);
-			binaryDirty[p.a] = false;
-			binaryDirty[p.a.neg] = false;
-
-			renum[p.a.var] = -1;
-		}
-
-		if(count)
-			varRemoved = true;
-
-		return count;
-	}
-
-	/** remove literal a from clause i */
-	void removeLiteral(CRef i, Lit a)
-	{
-		clauses[i].removeLiteral(a);
-
-		if(clauses[i].irred)
-			occCountIrred[a]--;
-		else
-			occCountRed[a]--;
-
-		if(clauses[i].length == 2)
-		{
-			addBinary(clauses[i][0], clauses[i][1]);
-			removeClause(i);
-		}
-		else assert(clauses[i].length > 2);
-	}
-
-	/** replace a by b in clause i (both a and b have to b proper literals) */
-	void replaceLiteral(CRef i, Lit a, Lit b)
-	{
-		if(b.neg in clauses[i])
-			return removeClause(i);
-
-		if(clauses[i].irred)
-			occCountIrred[a]--;
-		else
-			occCountRed[a]--;
-
-		if(clauses[i].replaceLiteral(a,b))
-		{
-			occList[b].pushBack(i);
-			if(clauses[i].irred)
-				occCountIrred[b]++;
-			else
-				occCountRed[b]++;
-		}
-		else
-		{
-			if(clauses[i].length == 2)
-			{
-				addBinary(clauses[i][0], clauses[i][1]);
-				removeClause(i);
-			}
-		}
-	}
-
-	/** add a unary clause, i.e. fix a literal */
-	void addUnary(Lit l)
-	{
-		if(!assign.setLiteral(toOuter(l)))
-			return;
-		prop.push(Propagation(l, Lit.one));
-	}
-
-	/** add a binary clause */
-	void addBinary(Lit a, Lit b)
-	{
-		if(a == b)
-			return addUnary(a);
-		else if(a == b.neg)
-			return;
-
-		binaryClauses[a].pushBack(b);
-		binaryClauses[b].pushBack(a);
-		binaryNew[a] = true;
-		binaryNew[b] = true;
-		binaryAnyNew = true;
-	}
-
-	/** add a ternary clause */
-	void addTernary(Lit a, Lit b, Lit c)
-	{
-		Lit[3] cl;
-		cl[0] = a;
-		cl[1] = b;
-		cl[2] = c;
-		addClause(cl[], true);
 	}
 
 	/**
-	 *  add clause of arbitrary length
-	 *  returns index of new clause
-	 *  returns -1 on tautologies and small implicitly stored clauses
+	 *  add clause
+	 *  assumes/asserts clause is syntactically well-formed (no duplicate variable)
+	 *  returns index of new clause or CRef.undef for small implicit ones
 	 */
 	CRef addClause(const Lit[] c, bool irred)
 	{
@@ -385,145 +94,156 @@ final class Sat
 
 		// NOTE: do not sort the clause: c[0], c[1] might be there for a reason.
 
-		// check for tautology
+		// check its is well formed
 		for(int i = 0; i < c.length; ++i)
 			for(int j = i+1; j < c.length; ++j)
+				assert(c[i].var != c[j].var);
+
+		// special case for small stuff
+		switch(c.length)
+		{
+			case 0: throw new Unsat;
+			case 1: return addUnary(c[0]);
+			case 2: return addBinary(c[0], c[1]);
+			default: break;
+		}
+
+		return clauses.add(c, irred);
+	}
+
+	/** ditto */
+	CRef addUnary(Lit l)
+	{
+		units.pushBack(l);
+		return CRef.undef;
+	}
+
+	/** ditto */
+	CRef addBinary(Lit a, Lit b)
+	{
+		assert(a.var != b.var);
+		bins[a].pushBack(b);
+		bins[b].pushBack(a);
+		return CRef.undef;
+	}
+
+	/** renumber according to trans, which should map old-var to new-lit */
+	void renumber(const Lit[] trans, int newVarCount)
+	{
+		// new varData-array
+		auto newVarData = Array!VarData(newVarCount);
+		for(int i = 0; i < varCount; ++i)
+			if(!trans[i].fixed)
 			{
-				assert(c[i] != c[j]);
-				if(c[i] == c[j].neg)
-					return CRef.undef;
+				newVarData[trans[i].var] = varData[i];
+				if(trans[i].sign)
+					newVarData[trans[i].var].flip;
 			}
 
-		if(c.length == 1)
+		// new bin-arrays
+		auto newBins = Array!(Array!Lit)(newVarCount*2);
+		for(int i = 0; i < varCount; ++i)
 		{
-			addUnary(c[0]);
-			return CRef.undef;
-		}
-
-		if(c.length == 2)
-		{
-			addBinary(c[0], c[1]);
-			return CRef.undef;
-		}
-
-		auto i = clauses.add(c, irred);
-		attachClause(i);
-		return i;
-	}
-
-	/** add clauses encoding that k or more of the literals in c should be true */
-	void addMinClause(const Lit[] c, int k, bool irred)
-	{
-		if(k <= 0)
-			return;
-
-		if(k == 1)
-		{
-			addClause(c, irred);
-			return;
-		}
-
-		if(k == c.length)
-		{
-			foreach(x; c)
-				addUnary(x);
-			return;
-		}
-
-		if(k > c.length)
-			throw new Unsat;
-
-		Array!Lit cl;
-		assert(c.length <= 30);
-		for(int sig = 0; sig < (1<<c.length); ++sig)
-			if(popcnt(sig) == c.length-k+1)
+			if(trans[i].fixed)
+				units.pushBack(bins[Lit(i, trans[i].sign).neg][]);
+			else
 			{
-				assert(cl.empty);
-				for(int i = 0; i < c.length; ++i)
-					if(sig & (1<<i))
-						cl.pushBack(c[i]);
-				addClause(cl[], irred);
+				if(newBins[trans[i]^false].empty)
+					newBins[trans[i]^false] = move(bins[Lit(i,false)]);
+				else
+					newBins[trans[i]^false].pushBack(bins[Lit(i,false)][]);
+
+				if(newBins[trans[i]^true].empty)
+					newBins[trans[i]^true] = move(bins[Lit(i,true)]);
+				else
+					newBins[trans[i]^true].pushBack(bins[Lit(i,true)][]);
 			}
-	}
-
-	/** add clauses encoding that at most k of the literals in c should be true */
-	void addMaxClause(const Lit[] c, int k, bool irred)
-	{
-		if(k >= c.length)
-			return;
-
-		if(k == 0)
-		{
-			foreach(x; c)
-				addUnary(x.neg);
-			return;
 		}
 
-		if(k < 0)
-			throw new Unsat;
-
-		Array!Lit cl;
-		assert(c.length <= 30);
-		for(int sig = 0; sig < (1<<c.length); ++sig)
-			if(popcnt(sig) == k+1)
+		// new bin content
+		bins = move(newBins);
+		foreach(ref list; bins)
+			foreach(ref x, ref bool rem; &list.prune)
 			{
-				assert(cl.empty);
-				for(int i = 0; i < c.length; ++i)
-					if(sig & (1<<i))
-						cl.pushBack(c[i].neg);
-				addClause(cl[], irred);
+				x = trans[x.var]^x.sign;
+				if(x == Lit.one)
+					rem = true;
+				if(x == Lit.zero)
+					assert(false); // not a bug
 			}
+
+		// renumber units (after binary in order to renumber freshly propagated units)
+		foreach(ref x, ref bool rem; &units.prune)
+		{
+			x = trans[x.var]^x.sign;
+			if(x == Lit.one)
+				rem = true;
+			if(x == Lit.zero)
+				throw new Unsat;
+		}
+
+		// renumber long clauses
+		outer: foreach(ref c; clauses)
+		{
+			for(int i = 0; i < c.length; ++i)
+			{
+				c[i] = trans[c[i].var]^c[i].sign;
+				if(c[i] == Lit.one)
+				{
+					c.remove;
+					continue outer;
+				}
+				if(c[i] == Lit.zero)
+				{
+					c[i] = c[$-1];
+					c.length--;
+					i--;
+				}
+			}
+
+			if(c.length <= 2)
+			{
+				addClause(c[], c.irred);
+				c.remove;
+			}
+		}
+
+		varData = move(newVarData); // this changes varCount, so do it last
 	}
 
-	/** remove clause i */
-	void removeClause(CRef i)
+	void cleanup()
 	{
-		assert(clauses[i].length);
-		clauseRemoved = true;
-		detachClause(i);
-		clauses[i].length = 0;
-	}
-
-	/** mark clause i as irreducible */
-	void makeClauseIrred(CRef i)
-	{
-		if(clauses[i].irred)
+		if(units.empty)
 			return;
-		clauses[i].makeIrred();
-		foreach(l; clauses[i])
+
+		auto trans = Array!Lit(varCount, Lit.undef);
+		foreach(x; units)
 		{
-			occCountRed[l]--;
-			occCountIrred[l]++;
-		}
-	}
-
-	/** check consitency of occ-lists. for debugging */
-	void check()
-	{
-		assert(prop.empty);
-
-		size_t count = 0;
-		for(int i = 0; i < varCount*2; ++i)
-		{
-			foreach(k; occs(Lit(i)))
-				assert(Lit(i) in clauses[k]);
-
-			count += occs(Lit(i)).length;
+			assign.setLiteral(varData[x.var].label^x.sign); // throws on contradicting units
+			trans[x.var] = Lit.one^x.sign;
 		}
 
-		foreach(ref c; clauses)
-			count -= c.length;
+		int count = 0;
+		for(int i = 0; i < varCount; ++i)
+			if(trans[i] == Lit.undef)
+				trans[i] = Lit(count++, false);
 
-		assert(count == 0);
-		writefln("c check okay");
+		renumber(trans[], count);
 	}
 
 	void dump()
 	{
+		// unary clauses
+		foreach(a; units)
+			writefln("%s 0", a);
+
+		// binary clauses
 		for(int i = 0; i < varCount*2; ++i)
-			foreach(l; bins(Lit(i)))
+			foreach(l; bins[Lit(i)])
 				if(i >= l)
 					writefln("%s %s 0", Lit(i), l);
+
+		// long clauses
 		foreach(ref c; clauses)
 			if(c.length)
 				writefln("%s 0", c.toString);
@@ -542,8 +262,8 @@ final class Sat
 
 		for(int i = 0; i < varCount; ++i)
 		{
-			nBin += bins(Lit(i,false)).length;
-			nBin += bins(Lit(i,true)).length;
+			nBin += bins[Lit(i,false)].length;
+			nBin += bins[Lit(i,true)].length;
 		}
 		nBin /= 2;
 

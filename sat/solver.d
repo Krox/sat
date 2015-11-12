@@ -20,6 +20,7 @@ struct Reason
 {
 	enum
 	{
+		_init = 0,
 		nil,
 		unary,
 		binary,
@@ -29,6 +30,7 @@ struct Reason
 	int type;
 	union { Lit lit2; CRef n; }
 
+	static enum Reason undef = make(_init);
 	static enum Reason decision = make(nil);
 	static enum Reason unit = make(unary);
 
@@ -57,7 +59,7 @@ private struct ActivityComp
 	Sat sat;
 	bool opCall(int a, int b)
 	{
-		return sat.activity[a] > sat.activity[b];
+		return sat.varData[a].activity > sat.varData[b].activity;
 	}
 }
 
@@ -95,16 +97,22 @@ final class Solver
 		ActivityComp cmp;
 		cmp.sat = sat;
 		activityHeap = typeof(activityHeap)(cmp);
-		for(int i = varCount-1; i >= 0; --i)
-			if(sat.renum[i] != -1)
-				activityHeap.push(i);
 
 		foreach(i, ref c; sat.clauses)
-			if(c.length)
-			{
-				watches[c[0]].pushBack(i);
-				watches[c[1]].pushBack(i);
-			}
+		{
+			watches[c[0]].pushBack(i);
+			watches[c[1]].pushBack(i);
+		}
+
+		// NOTE: add units _after_ adding long clauses to get consistent watches
+		foreach(l; sat.units)
+			if(!propagate(l, Reason.unit))
+				throw new Unsat;
+
+		// add non-fixed variables to activity heap
+		for(int i = 0; i < varCount; ++i)
+			if(reason[i] == Reason.undef)
+				activityHeap.push(i);
 	}
 
 	/**
@@ -163,14 +171,12 @@ final class Solver
 		stack.pushBack(x);
 		level[x.var] = currLevel;
 		reason[x.var] = r;
-		sat.polarity[x.var] = x.sign;
+		sat.varData[x.var].polarity = x.sign;
 	}
 
 	/**
 	 * set one literal and performs unit propagation
-	 * returns slice of newly assigned variables
-	 * returns empty non-null if literal was already set
-	 * returns null on conflict (and set conflict)
+	 * returns false on conflict
 	 **/
 	bool propagate(Lit _x, Reason reason)
 	{
@@ -192,7 +198,7 @@ final class Solver
 		{
 			auto x = stack[pos++];
 
-			foreach(Lit y; sat.bins(x.neg))
+			foreach(Lit y; sat.bins[x.neg])
 			{
 				if(assign[y])
 					continue;
@@ -395,8 +401,10 @@ final class Solver
 
 		while(true)
 		{
+			// choose branching literal
 			int branch = mostActiveVariable;
 
+			// no branch -> we are done
 			if(branch == -1)
 			{
 				for(int v = 0; v < varCount; ++v)
@@ -412,10 +420,12 @@ final class Solver
 				return true;
 			}
 
+			// propagate the decision
 			bumpLevel();
-			if(propagate(Lit(branch, sat.polarity[branch]), Reason.decision))
+			if(propagate(Lit(branch, sat.varData[branch].polarity), Reason.decision))
 				continue;
 
+			// analyze conflicts
 			while(true)
 			{
 				if(currLevel == 0) // conflict on level 0 -> UNSAT
@@ -437,6 +447,7 @@ final class Solver
 			if(numConflicts <= 0)
 			{
 				unrollLevel(0);
+				sat.units = move(stack);
 				return false;
 			}
 		}
