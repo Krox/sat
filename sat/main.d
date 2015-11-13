@@ -6,7 +6,6 @@ import std.datetime : Clock;
 import jive.array;
 
 import sat.sat, sat.parser, sat.solver, sat.twosat;
-import sat.stats;
 
 private import core.bitop: bsr, popcnt;
 

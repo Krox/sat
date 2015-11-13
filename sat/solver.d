@@ -13,8 +13,6 @@ import jive.lazyarray;
 import jive.priorityqueue;
 
 import sat.sat;
-import sat.stats;
-
 
 struct Reason
 {
@@ -70,13 +68,24 @@ final class Solver
 
 	Array!(Array!CRef) watches;
 
-	Array!bool assign;
+	static struct VarData
+	{
+		lbool value = lbool.undef;
+		int level; // only valid for assigned variables
+		Reason reason = Reason.undef; // ditto
+	}
+
+	Array!VarData varData;
+
+	ref lbool value(int i) { return varData[i].value; }
+	ref Reason reason(int i) { return varData[i].reason; }
+	ref int level(int i) { return varData[i].level; }
+	bool isSatisfied(Lit l) const { return varData[l.var].value == lbool(!l.sign); }
+
 	Array!Lit stack;
-	Array!int level; // only valid for assigned variables
 	Array!int savePoint; // indices into stack
 	int currLevel() const @property { return cast(int) savePoint.length; }
 
-	Array!Reason reason;
 	Lit[] conflict;
 	Lit[3] _conflict;
 	private LazyBitArray seen;
@@ -94,9 +103,7 @@ final class Solver
 
 		watches.resize(2*varCount);
 		stack.reserve(varCount);
-		level.resize(varCount);
-		assign.resize(2*varCount);
-		reason.resize(varCount);
+		varData.resize(varCount);
 		seen.resize(varCount);
 		ActivityComp cmp;
 		cmp.sat = sat;
@@ -115,7 +122,7 @@ final class Solver
 
 		// add non-fixed variables to activity heap
 		for(int i = 0; i < varCount; ++i)
-			if(reason[i] == Reason.undef)
+			if(reason(i) == Reason.undef)
 				activityHeap.push(i);
 	}
 
@@ -161,7 +168,7 @@ final class Solver
 		while(stack.length > savePoint[l])
 		{
 			Lit lit = stack.popBack;
-			assign[lit] = false;
+			value(lit.var) = lbool.undef;
 			if(lit.var !in activityHeap)
 				activityHeap.push(lit.var);
 		}
@@ -170,11 +177,11 @@ final class Solver
 
 	void set(Lit x, Reason r)
 	{
-		//assert(!assign[x] && !assign[x.neg]);
-		assign[x] = true;
+		//assert(value(x.var) == lbool.undef);
+		value(x.var) = lbool(!x.sign);
 		stack.pushBack(x);
-		level[x.var] = currLevel;
-		reason[x.var] = r;
+		level(x.var) = currLevel;
+		reason(x.var) = r;
 		sat.varData[x.var].polarity = x.sign;
 	}
 
@@ -187,11 +194,8 @@ final class Solver
 		if(reason == Reason.decision)
 			assert(currLevel > 0);
 
-		if(assign[_x])
-			return true;
-
-		if(assign[_x.neg])
-			return false;
+		if(value(_x.var) != lbool.undef)
+			return value(_x.var) == lbool(!_x.sign);
 
 		size_t pos = stack.length;
 		size_t startpos = pos;
@@ -202,32 +206,35 @@ final class Solver
 		{
 			auto x = stack[pos++];
 
+			// propagate binary clauses
 			foreach(Lit y; sat.bins[x.neg])
 			{
-				if(assign[y])
-					continue;
+				// not set -> propagate
+				if(value(y.var) == lbool.undef)
+					set(y, Reason(x.neg));
 
-				if(assign[y.neg])
+				// set wrong -> conflict
+				else if(isSatisfied(y.neg))
 				{
 					_conflict[0] = x.neg;
 					_conflict[1] = y;
 					conflict = _conflict[0..2];
 					return false;
 				}
-
-				set(y, Reason(x.neg));
 			}
 
+			// propagate long clauses
 			outer: foreach(i, ref bool rem; &watches[x.neg].prune)
 			{
 				auto c = sat.clauses[i][];
 
+				// move current variable to front position
 				if(x.neg == c[1])
 					swap(c[0], c[1]);
-
 				assert(x.neg == c[0]);
 
-				if(assign[c[1]])
+				// other watch satisfied -> do nothing
+				if(isSatisfied(c[1]))
 					continue outer;
 
 				foreach(ref y; c[2..$])
@@ -235,7 +242,7 @@ final class Solver
 					//if(assign[y]) // clause satisfied -> do nothing (TODO: check if this is a good idea)
 					//	continue outer;
 
-					if(!assign[y.neg]) // literal satisfied or undef -> move watch
+					if(!isSatisfied(y.neg)) // literal satisfied or undef -> move watch
 					{
 						swap(c[0], y);
 						watches[c[0]].pushBack(i);
@@ -244,7 +251,7 @@ final class Solver
 					}
 				}
 
-				if(assign[c[1].neg]) // all literals false -> conflict
+				if(isSatisfied(c[1].neg)) // all literals false -> conflict
 				{
 					conflict = c;
 					return false;
@@ -275,7 +282,7 @@ final class Solver
 
 		void visit(Lit lit)
 		{
-			if(seen[lit.var] || level[lit.var] == 0) // level 0 assignments are definite, so these variables can be skipped
+			if(seen[lit.var] || level(lit.var) == 0) // level 0 assignments are definite, so these variables can be skipped
 				return;
 			seen[lit.var] = true;
 
@@ -283,7 +290,7 @@ final class Solver
 			if(lit.var in activityHeap)
 				activityHeap.decrease(lit.var);
 
-			if(level[lit.var] < currLevel) // reason side
+			if(level(lit.var) < currLevel) // reason side
 				buf.pushBack(lit);
 			else // conflict side (includes the UIP itself)
 				count++;
@@ -302,17 +309,17 @@ final class Solver
 			if(--count == 0)
 				break;
 
-			switch(reason[stack[i].var].type)
+			switch(reason(stack[i].var).type)
 			{
 				case Reason.unary:
 					break;
 
 				case Reason.binary:
-					visit(reason[stack[i].var].lit2);
+					visit(reason(stack[i].var).lit2);
 					break;
 
 				case Reason.clause:
-					foreach(lit; sat.clauses[reason[stack[i].var].n])
+					foreach(lit; sat.clauses[reason(stack[i].var).n])
 						if(lit.var != stack[i].var)
 							visit(lit);
 					break;
@@ -341,7 +348,7 @@ final class Solver
 		{
 			int m = 1;
 			for(int k = 2; k < buf.length; ++k)
-				if(level[buf[k].var] > level[buf[m].var])
+				if(level(buf[k].var) > level(buf[m].var))
 					m = k;
 			swap(buf[1], buf[m]);
 		}
@@ -354,9 +361,9 @@ final class Solver
 	// helper for OTF strengthening
 	private bool isRedundant(Lit lit)
 	{
-		if(level[lit.var] == 0)
+		if(level(lit.var) == 0)
 			return true;
-		auto r = reason[lit.var];
+		auto r = reason(lit.var);
 		switch(r.type)
 		{
 			case Reason.unary: assert(false); //return true;
@@ -378,7 +385,7 @@ final class Solver
 		while(!activityHeap.empty)
 		{
 			int v = activityHeap.pop;
-			if(assign[Lit(v, false)] || assign[Lit(v, true)])
+			if(varData[v].value != lbool.undef)
 				continue;
 
 			// check the heap (very expensive, debug only)
@@ -412,13 +419,8 @@ final class Solver
 			if(branch == -1)
 			{
 				for(int v = 0; v < varCount; ++v)
-				{
-					if(assign[Lit(v, false)])
-						sat.addUnary(Lit(v, false));
-					else if(assign[Lit(v, true)])
-						sat.addUnary(Lit(v, true));
-					else {} // non-decision variables (e.g. fixed/removed in sat) don't need to be set
-				}
+					if(varData[v].value != lbool.undef) // non-decision variables (e.g. fixed/removed in sat) don't need to be set
+						sat.addUnary(Lit(v, !cast(bool)varData[v].value));
 
 				unrollLevel(0);
 				return true;
@@ -443,7 +445,7 @@ final class Solver
 				if(conflictClause.length == 1)
 					unrollLevel(0);
 				else
-					unrollLevel(level[conflictClause[1].var]);
+					unrollLevel(level(conflictClause[1].var));
 				if(propagate(conflictClause[0], reason))
 					break;
 			}

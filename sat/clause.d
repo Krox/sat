@@ -3,7 +3,7 @@ module sat.clause;
 import std.algorithm : join, swap, map, sort;
 import jive.array;
 
-import sat.assignment;
+import sat.types;
 
 struct Clause
 {

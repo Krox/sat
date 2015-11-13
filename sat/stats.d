@@ -1,7 +1,7 @@
 module sat.stats;
 
-import std.stdio;
-import std.datetime : Clock, StopWatch;
+private import std.stdio;
+public import std.datetime : Clock, StopWatch;
 
 StopWatch swTarjan, swSubsume, swSubsumeBinary, swXor, swSolver, swVarElim, swCleanup, swSolverStartup;
 

@@ -13,9 +13,7 @@ import jive.bitarray;
 import jive.lazyarray;
 import jive.queue;
 
-import sat.stats;
-public import sat.assignment;
-public import sat.clause;
+public import sat.stats, sat.types, sat.clause, sat.assignment;
 
 /**
  *  - implicit unary and binary clauses

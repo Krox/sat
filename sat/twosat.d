@@ -1,10 +1,10 @@
 module sat.twosat;
 
 private import std.stdio;
-import std.algorithm : min, sort;
+private import std.algorithm : min, sort;
 import jive.array;
+
 import sat.sat;
-import sat.stats;
 
 class TwoSat
 {
