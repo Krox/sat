@@ -1,4 +1,4 @@
-module sat.solver;
+module sat.searcher;
 
 /**
  * unit propagation, backtracking, conflict analysis, clause learning
@@ -61,7 +61,7 @@ private struct ActivityComp
 	}
 }
 
-final class Solver
+final class Searcher
 {
 	Sat sat;
 	int varCount() const @property { return sat.varCount; }

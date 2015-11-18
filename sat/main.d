@@ -5,7 +5,7 @@ import std.getopt;
 import std.datetime : Clock;
 import jive.array;
 
-import sat.sat, sat.parser, sat.solver, sat.twosat;
+import sat.sat, sat.parser, sat.searcher, sat.twosat;
 
 private import core.bitop: bsr, popcnt;
 
@@ -63,22 +63,22 @@ int main(string[] args)
 
 		sat.writeStatsHeader();
 
-		Solver solver = null;
+		Searcher searcher = null;
 		for(int i = 1; ; ++i)
 		{
 			// 2-sat is cheap, solver restart is expensive, so run it whenever the solver is down anyway
-			if(solver is null)
+			if(searcher is null)
 				new TwoSat(sat).run();
 
-			// run the solver
-			if(solver is null)
-				solver = new Solver(sat);
+			// run the CDCL searcher
+			if(searcher is null)
+				searcher = new Searcher(sat);
 			sat.writeStatsLine();
-			bool solved = solver.run(luby(i)*100);
+			bool solved = searcher.run(luby(i)*100);
 
 			if(solved)
 			{
-				delete solver;
+				delete searcher;
 				sat.cleanup;
 				assert(sat.varCount == 0);
 				break;
@@ -86,7 +86,7 @@ int main(string[] args)
 
 			if(sat.units.length >= 100)
 			{
-				delete solver;
+				delete searcher;
 				sat.cleanup;
 			}
 		}
