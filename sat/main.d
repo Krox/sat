@@ -27,9 +27,10 @@ int luby(int i)
 int main(string[] args)
 {
 	bool skipSolution = false;
-	string solutionFilename;
+	string solutionFilename, outputFilename;
 	getopt(args, "skipsolution|s", &skipSolution,
-	             "solution", &solutionFilename);
+	             "solution", &solutionFilename,
+				 "output|o", &outputFilename);
 
 	if(args.length != 2)
 	{
@@ -91,14 +92,14 @@ int main(string[] args)
 		}
 
 		sat.writeStatsFooter();
-
+		writefln("c solution found");
 		writeStats();
 
-		writefln("s SATISFIABLE");
-
 		sat.assign.extend();
-		if(!skipSolution)
-			sat.assign.print();
+		if(outputFilename !is null)
+			sat.assign.print(File(outputFilename, "w"));
+		else if(!skipSolution)
+			sat.assign.print(stdout);
 
 		return 10;
 	}

@@ -53,16 +53,17 @@ final class Assignment
 		}
 	}
 
-	void print() const
+	void print(File file) const
 	{
-		writef("v");
+		file.writefln("s SATISFIABLE");
+		file.writef("v");
 		for(int i = 0; i < varCount; ++i)
 		{
 			if(!assign[i].fixed)
 				throw new Exception("tried to output an incomplete assignment");
-			writef(" %s", Lit(i, assign[i].sign));
+			file.writef(" %s", Lit(i, assign[i].sign));
 		}
-		writefln(" 0");
+		file.writefln(" 0");
 	}
 
 	bool isSatisfied(Lit a) const

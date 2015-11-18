@@ -52,24 +52,37 @@ int main(string[] args)
 		writefln("[%s / %s] %s", i, filenames.length, file);
 		StopWatch sw;
 		sw.start;
-		auto r = executeShell("timeout "~to!string(timeout)~"s /usr/bin/time -f \"%U\" -o timeTmp "~solver~" "~file);
+		auto r = executeShell("timeout "~to!string(timeout)~"s /usr/bin/time -f \"%U\" -o timeTmp "~solver~" -osolutionTmp "~file);
 		sw.stop;
 
 		switch(r.status)
 		{
 			case 10:
-				writefln("\tsolution found");
-				++nSat;
-				break;
-
-			case 20:
-				writefln("\tUNSAT");
-				++nUnsat;
-				if(nocheck == false && executeShell("./cryptominisat "~file).status != 20)
+				writef("\tsolution found... ");
+				auto s = executeShell("bin/sat --solution=solutionTmp "~file);
+				if(s.status == 0)
+					writefln("checked");
+				else
 				{
 					writefln("CHECK FAILED");
 					return -1;
 				}
+				++nSat;
+				break;
+
+			case 20:
+				writef("\tunsat... ");
+				++nUnsat;
+				if(nocheck)
+					writefln("check skipped");
+				else if(executeShell("./cryptominisat "~file).status == 20)
+					writefln("checked");
+				else
+				{
+					writefln("CHECK FAILED");
+					return -1;
+				}
+
 				break;
 
 			case 30:
