@@ -453,7 +453,7 @@ final class Solver
 			if(numConflicts <= 0)
 			{
 				unrollLevel(0);
-				sat.units = move(stack);
+				sat.units = stack;
 				return false;
 			}
 		}
