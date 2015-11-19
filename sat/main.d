@@ -3,19 +3,8 @@ module sat.main;
 import std.stdio;
 import std.getopt;
 import std.datetime : Clock;
-import jive.array;
 
-import sat.sat, sat.parser, sat.searcher, sat.twosat;
-
-private import core.bitop: bsr, popcnt;
-
-int luby(int i)
-{
-	if(popcnt(i+1) == 1)
-		return (i+1)/2;
-	else
-		return luby(i-(1<<bsr(i))+1);
-}
+import sat.sat, sat.parser, sat.solver;
 
 /**
  * returns:
@@ -61,41 +50,13 @@ int main(string[] args)
 			}
 		}
 
-		sat.writeStatsHeader();
-
-		Searcher searcher = null;
-		for(int i = 1; ; ++i)
-		{
-			// 2-sat is cheap, solver restart is expensive, so run it whenever the solver is down anyway
-			if(searcher is null)
-				new TwoSat(sat).run();
-
-			// run the CDCL searcher
-			if(searcher is null)
-				searcher = new Searcher(sat);
-			sat.writeStatsLine();
-			bool solved = searcher.run(luby(i)*100);
-
-			if(solved)
-			{
-				delete searcher;
-				sat.cleanup;
-				assert(sat.varCount == 0);
-				break;
-			}
-
-			if(sat.units.length >= 100)
-			{
-				delete searcher;
-				sat.cleanup;
-			}
-		}
-
-		sat.writeStatsFooter();
+		solve(sat);
 		writefln("c solution found");
+
+		// time statistics
 		writeStats();
 
-		sat.assign.extend();
+		// solution
 		if(outputFilename !is null)
 			sat.assign.print(File(outputFilename, "w"));
 		else if(!skipSolution)
@@ -105,7 +66,7 @@ int main(string[] args)
 	}
 	catch(Unsat e)
 	{
-		sat.writeStatsFooter();
+		// time statistics
 		writeStats();
 		writefln("s UNSATISFIABLE");
 		return 20;

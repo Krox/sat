@@ -5,6 +5,8 @@ public import std.datetime : Clock, StopWatch;
 
 StopWatch swTarjan, swSubsume, swSubsumeBinary, swXor, swSolver, swVarElim, swCleanup, swSolverStartup;
 
+long nConflicts;
+
 void writeStats()
 {
 	auto total = Clock.currAppTick;

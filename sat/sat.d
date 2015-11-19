@@ -310,14 +310,14 @@ final class Sat
 
 	void writeStatsHeader()
 	{
-		writefln("c ╔═════════╤═══════════════════╤═══════════════╤═══════════════╗");
-		writefln("c ║    vars │   binary  ternary │     long  len │   learnt  len ║");
-		writefln("c ╟─────────┼───────────────────┼───────────────┼───────────────╢");
+		writefln("c ╔═══════════╤══════════╤══════════╤════════════════╤════════════════╗");
+		writefln("c ║ conflicts │   vars   │  binary  │     long   len │   learnt   len ║");
+		writefln("c ╟───────────┼──────────┼──────────┼────────────────┼────────────────╢");
 	}
 
 	void writeStatsLine()
 	{
-		long nBin, nTer, nLong, nLearnt, nLitsLong, nLitsLearnt;
+		long nBin, nLong, nLearnt, nLitsLong, nLitsLearnt;
 
 		for(int i = 0; i < varCount; ++i)
 		{
@@ -327,27 +327,22 @@ final class Sat
 		nBin /= 2;
 
 		foreach(ref c; clauses)
-			if(c.length)
+			if(c.irred)
 			{
-				if(c.length == 3)
-					++nTer;
-				else if(c.irred)
-				{
-					nLitsLong += c.length;
-					++nLong;
-				}
-				else
-				{
-					nLitsLearnt += c.length;
-					++nLearnt;
-				}
+				nLitsLong += c.length;
+				++nLong;
+			}
+			else
+			{
+				nLitsLearnt += c.length;
+				++nLearnt;
 			}
 
-		writefln("c ║ %#7s │ %#8s %#8s │ %#8s %#4.1f │ %#8s %#4.1f ║", varCount, nBin, nTer, nLong, cast(float)nLitsLong/nLong, nLearnt, cast(float)nLitsLearnt/nLearnt);
+		writefln("c ║ %#9s │ %#8s │ %#8s │ %#8s %#5.1f │ %#8s %#5.1f ║", nConflicts, varCount, nBin, nLong, cast(float)nLitsLong/nLong, nLearnt, cast(float)nLitsLearnt/nLearnt);
 	}
 
 	void writeStatsFooter()
 	{
-		writefln("c ╚═════════╧═══════════════════╧═══════════════╧═══════════════╝");
+		writefln("c ╚═══════════╧══════════╧══════════╧════════════════╧════════════════╝");
 	}
 }

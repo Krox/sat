@@ -440,6 +440,7 @@ final class Searcher
 				auto conflictClause = analyzeConflict();
 				auto reason = addClause(conflictClause[]);
 				--numConflicts;
+				++nConflicts;
 				//writefln("conflict: %s", conflictClause[]);
 
 				if(conflictClause.length == 1)

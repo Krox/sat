@@ -6,6 +6,11 @@ import jive.array;
 
 import sat.sat;
 
+/**
+ * explicit solving of the two-sat sub-problem. I.e. looking for equivalent
+ * variables. very fast (linear in problem size), implemented using tarjan's
+ * algorithm for stongly connected components.
+ */
 class TwoSat
 {
 	private Sat sat;
