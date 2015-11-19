@@ -117,8 +117,14 @@ final class Searcher
 
 		// NOTE: add units _after_ adding long clauses to get consistent watches
 		foreach(l; sat.units)
+		{
+			if(isSatisfied(l))
+				continue;
+			if(isSatisfied(l.neg))
+				throw new Unsat;
 			if(!propagate(l, Reason.unit))
 				throw new Unsat;
+		}
 
 		// add non-fixed variables to activity heap
 		for(int i = 0; i < varCount; ++i)
@@ -175,9 +181,10 @@ final class Searcher
 		savePoint.resize(l);
 	}
 
-	void set(Lit x, Reason r)
+	/* set a (previously unset) variable */
+	private void set(Lit x, Reason r)
 	{
-		//assert(value(x.var) == lbool.undef);
+		assert(value(x.var) == lbool.undef);
 		value(x.var) = lbool(!x.sign);
 		stack.pushBack(x);
 		level(x.var) = currLevel;
@@ -185,20 +192,12 @@ final class Searcher
 		sat.varData[x.var].polarity = x.sign;
 	}
 
-	/**
-	 * set one literal and performs unit propagation
-	 * returns false on conflict
-	 **/
-	bool propagate(Lit _x, Reason reason)
+	/** set a (previously unset) variable and propagate binaries. False on conflict. */
+	private bool propagateBinary(Lit _x, Reason reason)
 	{
-		if(reason == Reason.decision)
-			assert(currLevel > 0);
-
-		if(value(_x.var) != lbool.undef)
-			return value(_x.var) == lbool(!_x.sign);
+		assert(value(_x.var) == lbool.undef);
 
 		size_t pos = stack.length;
-		size_t startpos = pos;
 
 		set(_x, reason);
 
@@ -222,6 +221,24 @@ final class Searcher
 					return false;
 				}
 			}
+		}
+
+		return true;
+	}
+
+	/** set a (previously unset) variable and propagates everything. False on conflict. */
+	private bool propagate(Lit _x, Reason reason)
+	{
+		assert(value(_x.var) == lbool.undef);
+
+		size_t pos = stack.length;
+
+		if(!propagateBinary(_x, reason))
+			return false;
+
+		while(pos != stack.length)
+		{
+			auto x = stack[pos++];
 
 			// propagate long clauses
 			outer: foreach(i, ref bool rem; &watches[x.neg].prune)
@@ -238,10 +255,6 @@ final class Searcher
 					continue outer;
 
 				foreach(ref y; c[2..$])
-				{
-					//if(assign[y]) // clause satisfied -> do nothing (TODO: check if this is a good idea)
-					//	continue outer;
-
 					if(!isSatisfied(y.neg)) // literal satisfied or undef -> move watch
 					{
 						swap(c[0], y);
@@ -249,7 +262,6 @@ final class Searcher
 						rem = true;
 						continue outer;
 					}
-				}
 
 				if(isSatisfied(c[1].neg)) // all literals false -> conflict
 				{
@@ -257,7 +269,7 @@ final class Searcher
 					return false;
 				}
 
-				set(c[1], Reason(i)); // clause is unit -> propagate it
+				propagateBinary(c[1], Reason(i)); // clause is unit -> propagate it
 			}
 		}
 
