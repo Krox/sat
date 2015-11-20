@@ -55,18 +55,23 @@ struct Reason
 private struct ActivityComp
 {
 	Sat sat;
+
+	this(Sat sat)
+	{
+		this.sat = sat;
+	}
+
 	bool opCall(int a, int b)
 	{
 		return sat.varData[a].activity > sat.varData[b].activity;
 	}
 }
 
+/** NOTE: only one instance should exist at any time as global data is used to save allocation time */
 final class Searcher
 {
 	Sat sat;
 	int varCount() const @property { return sat.varCount; }
-
-	Array!(Array!CRef) watches;
 
 	static struct VarData
 	{
@@ -75,22 +80,23 @@ final class Searcher
 		Reason reason = Reason.undef; // ditto
 	}
 
-	Array!VarData varData;
-
-	ref lbool value(int i) { return varData[i].value; }
-	ref Reason reason(int i) { return varData[i].reason; }
-	ref int level(int i) { return varData[i].level; }
-	bool isSatisfied(Lit l) const { return varData[l.var].value == lbool(!l.sign); }
-
-	Array!Lit stack;
+	// NOTE: these are static just to save some allocation time
+	static Array!VarData varData;
+	static Array!(Array!CRef) watches; // watches into long clauses
+	Array!Lit stack; // trail of set variables
 	Array!int savePoint; // indices into stack
+	static PriorityQueue!(int, ActivityComp, true) activityHeap; // variables by activity for branch decision
+
+	static LazyBitArray seen; // temporary multi-purpose one bit pervariable. reset right before use
+
+	Lit[] conflict; // conflict encountered, only valid after propagate(...) returned false
+	private Lit[3] _conflict;
+
+	ref lbool value(int i) const { return varData[i].value; }
+	ref Reason reason(int i) const { return varData[i].reason; }
+	ref int level(int i) const { return varData[i].level; }
+	bool isSatisfied(Lit l) const { return varData[l.var].value == lbool(!l.sign); }
 	int currLevel() const @property { return cast(int) savePoint.length; }
-
-	Lit[] conflict;
-	Lit[3] _conflict;
-	private LazyBitArray seen;
-
-	private PriorityQueue!(int, ActivityComp, true) activityHeap;
 
 	this(Sat sat)
 	{
@@ -101,13 +107,11 @@ final class Searcher
 		this.sat = sat;
 		assert(varCount > 0);
 
-		watches.resize(2*varCount);
-		stack.reserve(varCount);
-		varData.resize(varCount);
+		watches.assign(2*varCount, Array!CRef.init);
+		varData.assign(varCount, VarData.init);
 		seen.resize(varCount);
-		ActivityComp cmp;
-		cmp.sat = sat;
-		activityHeap = typeof(activityHeap)(cmp);
+		activityHeap.pred = ActivityComp(sat);
+		activityHeap.clear();
 
 		foreach(i, ref c; sat.clauses)
 		{
@@ -127,6 +131,7 @@ final class Searcher
 		}
 
 		// add non-fixed variables to activity heap
+		activityHeap.reserve(varCount);
 		for(int i = 0; i < varCount; ++i)
 			if(reason(i) == Reason.undef)
 				activityHeap.push(i);
