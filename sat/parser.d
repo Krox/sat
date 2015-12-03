@@ -94,16 +94,14 @@ BitArray readSolution(string filename, int varCount)
 	auto buf = cast(string)read(filename);
 
 	buf = skipComments(buf);
-	if(buf[0..13] != "s SATISFIABLE")
+	if(buf[0..5] == "UNSAT")
+		assert(false, "TODO");
+	if(buf[0..3] != "SAT")
 		throw new Exception("solution with invalid 's' line");
-	buf = buf[13..$];
+	buf = buf[3..$];
 	buf = skipComments(buf);
 
 	auto sol = BitArray(varCount*2);
-
-	if(buf[0] != 'v')
-		throw new Exception("no 'v' line in solution");
-	buf = buf[1..$];
 
 	for(int i = 0; i < varCount; ++i)
 	{

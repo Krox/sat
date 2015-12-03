@@ -15,15 +15,9 @@ import sat.sat, sat.parser, sat.solver;
  */
 int main(string[] args)
 {
-	bool skipSolution = false;
-	string solutionFilename, outputFilename;
-	getopt(args, "skipsolution|s", &skipSolution,
-	             "solution", &solutionFilename,
-				 "output|o", &outputFilename);
-
-	if(args.length != 2)
+	if(args.length != 2 && args.length != 3)
 	{
-		writefln("usage: sat <filename>");
+		writefln("usage: sat <cnf input> [solution output]");
 		return -1;
 	}
 
@@ -35,40 +29,32 @@ int main(string[] args)
 		sat = readDimacs(args[1]);
 		writefln("c read in %.2f s", Clock.currAppTick.msecs/1000.0f);
 
-		if(solutionFilename !is null)
-		{
-			auto sol = readSolution(solutionFilename, sat.varCount);
-			if(sat.checkSolution(sol))
-			{
-				writefln("c solution checked");
-				return 0;
-			}
-			else
-			{
-				writefln("INVALID SOLUTION");
-				return -1;
-			}
-		}
-
 		solve(sat);
-		writefln("c solution found");
+
+		// verdict
+		writefln("s SATISFIABLE");
+
+		// print solution to file
+		if(args.length >= 3)
+			sat.assign.print(File(args[2], "w"));
 
 		// time statistics
 		writeStats();
-
-		// solution
-		if(outputFilename !is null)
-			sat.assign.print(File(outputFilename, "w"));
-		else if(!skipSolution)
-			sat.assign.print(stdout);
 
 		return 10;
 	}
 	catch(Unsat e)
 	{
+		// verdict
+		writefln("s UNSATISFIABLE");
+
+		// print verdict to file
+		if(args.length >= 3)
+			File(args[2], "w").writefln("UNSAT");
+
 		// time statistics
 		writeStats();
-		writefln("s UNSATISFIABLE");
+
 		return 20;
 	}
 

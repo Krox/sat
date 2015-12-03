@@ -52,14 +52,14 @@ int main(string[] args)
 		writefln("[%s / %s] %s", i, filenames.length, file);
 		StopWatch sw;
 		sw.start;
-		auto r = executeShell("timeout "~to!string(timeout)~"s /usr/bin/time -f \"%U\" -o timeTmp "~solver~" -osolutionTmp "~file);
+		auto r = executeShell("timeout "~to!string(timeout)~"s /usr/bin/time -f \"%U\" -o timeTmp "~solver~" "~file~" solutionTmp");
 		sw.stop;
 
 		switch(r.status)
 		{
 			case 10:
 				writef("\tsolution found... ");
-				auto s = executeShell("bin/sat --solution=solutionTmp "~file);
+				auto s = executeShell("./check.d "~file~" solutionTmp");
 				if(s.status == 0)
 					writefln("checked");
 				else
