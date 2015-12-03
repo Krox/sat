@@ -274,7 +274,8 @@ final class Searcher
 					return false;
 				}
 
-				propagateBinary(c[1], Reason(i)); // clause is unit -> propagate it
+				if(!propagateBinary(c[1], Reason(i))) // clause is unit -> propagate it
+					return false;
 			}
 		}
 
