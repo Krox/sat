@@ -13,7 +13,7 @@ import jive.bitarray;
 import jive.lazyarray;
 import jive.queue;
 
-public import sat.stats, sat.types, sat.clause, sat.assignment;
+public import sat.stats, sat.types, sat.clause, sat.solution;
 
 /**
  *  - implicit unary and binary clauses
@@ -42,9 +42,10 @@ final class Sat
 
 	double activityInc = 1;
 
-	Assignment assign;
+	Solution solution; // (partial) solution, numbered with outer variable names
 
 	// clauses
+	bool contradiction; // empty clause
 	Array!Lit units; // unit clauses
 	Array!(Array!Lit) bins; // binary clauses
 	ClauseStorage clauses; // len >= 3 clauses
@@ -52,7 +53,7 @@ final class Sat
 	this(int varCount)
 	{
 		clauses = new ClauseStorage;
-		assign = new Assignment(varCount);
+		solution = new Solution(varCount);
 		varData.resize(varCount);
 		bins.resize(varCount*2);
 		for(int i = 0; i < varCount; ++i)
@@ -94,9 +95,6 @@ final class Sat
 	 */
 	CRef addClause(const Lit[] c, bool irred)
 	{
-		if(c.length == 0)
-			throw new Unsat;
-
 		// NOTE: do not sort the clause: c[0], c[1] might be there for a reason.
 
 		// check it is well formed
@@ -107,13 +105,20 @@ final class Sat
 		// special case for small stuff
 		switch(c.length)
 		{
-			case 0: throw new Unsat;
+			case 0: return addEmpty();
 			case 1: return addUnary(c[0]);
 			case 2: return addBinary(c[0], c[1]);
 			default: break;
 		}
 
 		return clauses.addClause(c, irred);
+	}
+
+	/** ditto */
+	CRef addEmpty()
+	{
+		contradiction = true;
+		return CRef.undef;
 	}
 
 	/** ditto */
@@ -147,7 +152,7 @@ final class Sat
 			if(x == Lit.one)
 				rem = true;
 			else if(x == Lit.zero)
-				throw new Unsat;
+				addEmpty();
 			else assert(x.proper);
 		}
 
@@ -169,7 +174,7 @@ final class Sat
 				else if(x == Lit.zero || x == a) // (a or a), (a or 0)
 				{
 					if(a == Lit.zero)
-						throw new Unsat;
+						addEmpty();
 
 					units.pushBack(a);
 					rem = true;
@@ -225,12 +230,12 @@ final class Sat
 		for(int i = 0; i < varCount; ++i)
 			if(!trans[i].fixed)
 			{
-				// already has a new name -> skip
-				// (so that the new variable will have the label of the lowest
-				//  old variable. Important to be consistent with the
-				//  equivalences that twosat puts into the assignment)
+				// already has a new name -> put equivalence in solution
 				if(newVarData[trans[i].var].label != Lit.undef)
+				{
+					solution.setEquivalence(varData[i].label, newVarData[trans[i].var].label^trans[i].sign);
 					continue;
+				}
 
 				newVarData[trans[i].var] = varData[i];
 				if(trans[i].sign)
@@ -242,6 +247,7 @@ final class Sat
 
 	void cleanup()
 	{
+		assert(!contradiction);
 		if(units.empty)
 			return;
 
@@ -253,8 +259,15 @@ final class Sat
 
 		foreach(x; units)
 		{
-			assign.setLiteral(toOuter(x)); // throws on contradicting units
+			if(trans[x.var] == (Lit.one^x.sign))
+				continue;
+			else if(trans[x.var] == (Lit.zero^x.sign))
+				addEmpty();
+			else
+				assert(trans[x.var] == Lit.undef);
+
 			trans[x.var] = Lit.one^x.sign;
+			solution.setLiteral(toOuter(x));
 		}
 
 		int count = 0;
@@ -267,6 +280,10 @@ final class Sat
 
 	void dump()
 	{
+		// empty clause
+		if(contradiction)
+			writefln("0");
+
 		// unary clauses
 		foreach(a; units)
 			writefln("%s 0", a);

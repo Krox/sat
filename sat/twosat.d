@@ -60,13 +60,13 @@ class TwoSat
 			return;
 
 		if(comp.length >= 2 && comp[0] == comp[1].neg)
-			throw new Unsat;
+		{
+			sat.addEmpty();
+			return;
+		}
 
 		//if(comp.length > 1)
 		//	writefln("%s", comp[]);
-
-		foreach(l; comp[1..$])
-			sat.assign.setEquivalence(sat.toOuter(l), sat.toOuter(comp[0]));
 
 		foreach(l; comp[])
 		{

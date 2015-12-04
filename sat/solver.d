@@ -18,7 +18,7 @@ private int luby(int i)
 
 /**
  *  solves a sat problem.
- *  throws if it is unsatisfiable
+ *  afterwards, sat will either have a contradiction or a solution
  */
 void solve(Sat sat)
 {
@@ -41,14 +41,7 @@ void solve(Sat sat)
 		bool solved = searcher.run(luby(i)*100);
 
 		if(solved)
-		{
-			delete searcher;
-
-			sat.cleanup;
-			assert(sat.varCount == 0);
-			sat.assign.extend();
-			return;
-		}
+			break;
 
 		while(sat.units.length >= 100) // TODO: tweak strategy (after optimizing searcher startup time)
 		{
@@ -59,5 +52,12 @@ void solve(Sat sat)
 
 			sat.writeStatsLine();
 		}
+	}
+
+	if(!sat.contradiction)
+	{
+		sat.cleanup;
+		assert(sat.varCount == 0);
+		sat.solution.extend();
 	}
 }

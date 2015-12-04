@@ -23,27 +23,26 @@ int main(string[] args)
 
 	writefln("c cnf file: %s", args[1]);
 
-	Sat sat;
-	try
+	auto sat = readDimacs(args[1]);
+	writefln("c read in %.2f s", Clock.currAppTick.msecs/1000.0f);
+
+	solve(sat);
+
+	if(!sat.contradiction)
 	{
-		sat = readDimacs(args[1]);
-		writefln("c read in %.2f s", Clock.currAppTick.msecs/1000.0f);
-
-		solve(sat);
-
 		// verdict
 		writefln("s SATISFIABLE");
 
 		// print solution to file
 		if(args.length >= 3)
-			sat.assign.print(File(args[2], "w"));
+			sat.solution.print(File(args[2], "w"));
 
 		// time statistics
 		writeStats();
 
 		return 10;
 	}
-	catch(Unsat e)
+	else
 	{
 		// verdict
 		writefln("s UNSATISFIABLE");
@@ -57,6 +56,4 @@ int main(string[] args)
 
 		return 20;
 	}
-
-	return -2;
 }

@@ -148,11 +148,3 @@ struct Lit
 		return (toInt & (1U<<31)) == 0;
 	}
 }
-
-class Unsat : Exception
-{
-	this()
-	{
-		super("answer is unsat");
-	}
-}

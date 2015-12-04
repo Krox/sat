@@ -124,10 +124,11 @@ final class Searcher
 		{
 			if(isSatisfied(l))
 				continue;
-			if(isSatisfied(l.neg))
-				throw new Unsat;
-			if(!propagate(l, Reason.unit))
-				throw new Unsat;
+			if(isSatisfied(l.neg) || !propagate(l, Reason.unit))
+			{
+				sat.addEmpty();
+				return;
+			}
 		}
 
 		// add non-fixed variables to activity heap
@@ -418,8 +419,7 @@ final class Searcher
 
 	/**
 	 * Search for a solution using CDCL.
-	 *    - throws on UNSAT
-	 *    - returns true if solution was found
+	 *    - returns true if solution or contradiction was found
 	 *    - returns false if maximum number of conflicts was reached
 	 */
 	bool run(int numConflicts)
@@ -427,6 +427,9 @@ final class Searcher
 		swSolver.start();
 		scope(exit)
 			swSolver.stop();
+
+		if(sat.contradiction)
+			return true;
 
 		while(true)
 		{
@@ -453,7 +456,10 @@ final class Searcher
 			while(true)
 			{
 				if(currLevel == 0) // conflict on level 0 -> UNSAT
-					throw new Unsat;
+				{
+					sat.addEmpty();
+					return true;
+				}
 
 				auto conflictClause = analyzeConflict();
 				auto reason = addClause(conflictClause[]);

@@ -1,11 +1,11 @@
-module sat.assignment;
+module sat.solution;
 
 private import std.stdio;
 private import jive.array;
 
 import sat.types, sat.clause;
 
-final class Assignment
+final class Solution
 {
 	private Array!Lit assign; // undef / elim / fixed
 	private ClauseStorage extension;
@@ -18,18 +18,11 @@ final class Assignment
 		extension = new ClauseStorage;
 	}
 
-	/** return false, if the literal was already set */
-	bool setLiteral(Lit l)
+	/** set a (previously unset) literal */
+	void setLiteral(Lit l)
 	{
-		if(assign[l.var] == (Lit.one^l.sign))
-			return false;
-		else if(assign[l.var] == (Lit.zero^l.sign))
-			throw new Unsat;
-		else
-			assert(assign[l.var] == Lit.undef);
-
+		assert(assign[l.var] == Lit.undef);
 		assign[l.var] = Lit.one^l.sign;
-		return true;
 	}
 
 	/** eliminate a by setting it equivalent to b */
