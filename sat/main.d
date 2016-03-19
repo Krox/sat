@@ -1,7 +1,7 @@
 module sat.main;
 
 import std.stdio;
-import std.getopt;
+import std.getopt : getopt;
 import std.datetime : Clock;
 
 import sat.sat, sat.parser, sat.solver;
@@ -15,6 +15,10 @@ import sat.sat, sat.parser, sat.solver;
  */
 int main(string[] args)
 {
+	getopt(args,
+		"binary-subsume", &config.binarySubsume,
+		);
+
 	if(args.length != 2 && args.length != 3)
 	{
 		writefln("usage: sat <cnf input> [solution output]");

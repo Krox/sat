@@ -115,6 +115,7 @@ final class Searcher
 
 		foreach(i, ref c; sat.clauses)
 		{
+			assert(c.length >= 3); // such should have been converted to implicit clauses
 			watches[c[0]].pushBack(i);
 			watches[c[1]].pushBack(i);
 		}

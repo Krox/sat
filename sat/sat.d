@@ -217,12 +217,6 @@ final class Sat
 				if(c.removed)
 					continue outer;
 			}
-
-			if(c.length <= 2)
-			{
-				addClause(c[], c.irred);
-				c.remove;
-			}
 		}
 
 		// new varData-array (this changes varCount, so do it last)
@@ -245,15 +239,12 @@ final class Sat
 
 	}
 
-	void cleanup()
+	/** renumber accoring to currently known unary clauses */
+	void renumber()
 	{
 		assert(!contradiction);
 		if(units.empty)
 			return;
-
-		swCleanup.start();
-		scope(exit)
-			swCleanup.stop();
 
 		auto trans = Array!Lit(varCount, Lit.undef);
 
@@ -276,6 +267,23 @@ final class Sat
 				trans[i] = Lit(count++, false);
 
 		renumber(trans[], count, false);
+	}
+
+	/** renumber for units and make all short clauses implicit */
+	void cleanup()
+	{
+		swCleanup.start();
+		scope(exit)
+			swCleanup.stop();
+
+		renumber();
+
+		foreach(ref c; clauses)
+			if(c.length < 3)
+			{
+				addClause(c[], c.irred);
+				c.remove;
+			}
 	}
 
 	void dump()

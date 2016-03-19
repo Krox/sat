@@ -2,10 +2,9 @@ module sat.solver;
 
 private import std.stdio;
 
-private import sat.sat, sat.searcher, sat.twosat;
+private import sat.sat, sat.searcher, sat.twosat, sat.simplify;
 
 private import core.bitop: bsr, popcnt;
-
 
 /** luby sequence, used as restart strategy */
 private int luby(int i)
@@ -14,6 +13,12 @@ private int luby(int i)
 		return (i+1)/2;
 	else
 		return luby(i-(1<<bsr(i))+1);
+}
+
+struct config
+{
+	static:
+	bool binarySubsume = false;
 }
 
 /**
@@ -25,6 +30,7 @@ void solve(Sat sat)
 	long lastCleanup = 0;
 	// this is cheap, so just run it before starting up anything sophisticated
 	new TwoSat(sat).run();
+	sat.cleanup();
 
 	sat.writeStatsHeader();
 	sat.writeStatsLine();
@@ -47,8 +53,17 @@ void solve(Sat sat)
 		{
 			lastCleanup = nConflicts;
 			delete searcher;
+
 			sat.cleanup;
+
 			new TwoSat(sat).run();
+			sat.cleanup;
+
+			if(config.binarySubsume)
+			{
+				simplify(sat);
+				sat.cleanup;
+			}
 
 			sat.writeStatsLine();
 		}
