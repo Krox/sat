@@ -93,7 +93,7 @@ final class Searcher
 	Array!int savePoint; // indices into stack
 	static PriorityQueue!(int, ActivityComp, true) activityHeap; // variables by activity for branch decision
 
-	static LazyBitArray seen; // temporary multi-purpose one bit pervariable. reset right before use
+	static LazyBitArray seen; // temporary multi-purpose, one bit per variable, reset right before use
 
 	Lit[] conflict; // conflict encountered, only valid after propagate(...) returned false
 	private Lit[3] _conflict;
@@ -141,7 +141,7 @@ final class Searcher
 		// add non-fixed variables to activity heap
 		activityHeap.reserve(varCount);
 		for(int i = 0; i < varCount; ++i)
-			if(reason(i) == Reason.undef)
+			if(value(i) == lbool.undef)
 				activityHeap.push(i);
 	}
 
@@ -334,14 +334,16 @@ final class Searcher
 			if(!seen[stack[i].var])
 				continue;
 
-			if(--count == 0)
+			// only one variable on confict side left -> thats the UIP
+			if(count-- == 1)
+			{
+				buf[0] = stack[i].neg;
 				break;
+			}
 
+			// not the UIP -> do a resolution step
 			switch(reason(stack[i].var).type)
 			{
-				case Reason.nil:
-					break;
-
 				case Reason.binary:
 					visit(reason(stack[i].var).lit2);
 					break;
@@ -352,24 +354,30 @@ final class Searcher
 							visit(lit);
 					break;
 
+				// NOTE: Reason.nil can only happen for the decision variable which will not be part of this analysis
 				default:
 					throw new Exception("invalid reason type in conflict analysis");
 			}
 		}
 
-		buf[0] = stack[i].neg;
-
 		// At this point the conflict clause consists of the asserting literal
 		// in buf[0] (current level) and all seen[] literals in previous levels.
 		// So we can use seen[] to strengthen the clause
 
+		nLitsLearnt += buf.length;
+
 		// strengthen the conflict clause using the reason clauses
-		foreach(k, lit, ref bool rem; &buf.prune)
-		{
-			if(k == 0)
-				continue;
-			rem = isRedundant(lit);
-		}
+		if(config.otf >= 1)
+			foreach(k, lit, ref bool rem; &buf.prune)
+			{
+				if(k == 0)
+					continue;
+				if(isRedundant(lit))
+				{
+					rem = true;
+					nLitsOtfRemoved += 1;
+				}
+			}
 
 		// move the highest level literal (excluding the asserting lit) to buf[1]
 		if(buf.length > 1)
@@ -389,6 +397,42 @@ final class Searcher
 	// helper for OTF strengthening
 	private bool isRedundant(Lit lit)
 	{
+		import std.stdio;
+
+		assert(lit.proper);
+		if(level(lit.var) == 0)
+			return true;
+
+		auto r = reason(lit.var);
+
+		switch(r.type)
+		{
+			// descision variable -> cannot be removed
+			case Reason.nil:
+				return false;
+
+			// otherwise, try to resolve it
+			case Reason.binary:
+				assert(r.lit2 != lit);
+				//writefln("%s -> %s", lit, r.lit2);
+				return seen[r.lit2.var] || (config.otf >= 2 && isRedundant(r.lit2));
+			case Reason.clause:
+				//writefln("%s -> %s", lit, sat.clauses[r.n][]);
+				foreach(l; sat.clauses[r.n])
+					if(l != lit && !seen[l.var] && !(config.otf >= 2 && isRedundant(l)))
+						return false;
+				seen[lit.var] = true;
+				return true;
+
+
+
+			default: assert(false);
+		}
+	}
+
+	// helper for OTF strengthening
+	/+private bool isRedundant(Lit lit)
+	{
 		if(level(lit.var) == 0)
 			return true;
 		auto r = reason(lit.var);
@@ -405,7 +449,7 @@ final class Searcher
 				return false;
 			default: assert(false);
 		}
-	}
+	}+/
 
 	/** most active undefined variable. -1 if everything is assigned */
 	int mostActiveVariable()

@@ -18,6 +18,7 @@ int main(string[] args)
 	getopt(args,
 		"binary-subsume", &config.binarySubsume,
 		"watch-stats", &config.watchStats,
+		"otf", &config.otf,
 		);
 
 	if(args.length != 2 && args.length != 3)

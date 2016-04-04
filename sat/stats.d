@@ -11,6 +11,8 @@ private import math.histogram;
 StopWatch swTarjan, swSubsume, swSubsumeBinary, swXor, swSolver, swVarElim, swCleanup, swSolverStartup;
 
 long nConflicts;
+long nLitsOtfRemoved;
+long nLitsLearnt;
 
 Histogram watchHisto;
 
@@ -19,6 +21,7 @@ struct config
 	static:
 	bool binarySubsume = false;
 	bool watchStats = false;
+	int otf = 2;
 }
 
 void initStats()
@@ -37,6 +40,10 @@ void writeStats()
 		writefln("watch-list size:");
 		watchHisto.write;
 	}
+
+	writefln("c conflicts: %s", nConflicts);
+	if(config.otf > 0)
+		writefln("c otf removed %4.1f %% of literals", 100f*nLitsOtfRemoved/nLitsLearnt);
 
 	writefln("c tarjan     %#6.2f s (%#4.1f %%)", swTarjan.peek.msecs/1000.0f, 100f*swTarjan.peek.msecs/total.msecs);
 	writefln("c xor        %#6.2f s (%#4.1f %%)", swXor.peek.msecs/1000.0f, 100f*swXor.peek.msecs/total.msecs);
