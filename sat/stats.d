@@ -1,16 +1,43 @@
 module sat.stats;
 
+/**
+ * global variables for configuration and statistics;
+ */
+
 private import std.stdio;
 public import std.datetime : Clock, StopWatch;
+private import math.histogram;
 
 StopWatch swTarjan, swSubsume, swSubsumeBinary, swXor, swSolver, swVarElim, swCleanup, swSolverStartup;
 
 long nConflicts;
 
+Histogram watchHisto;
+
+struct config
+{
+	static:
+	bool binarySubsume = false;
+	bool watchStats = false;
+}
+
+void initStats()
+{
+	if(config.watchStats)
+		watchHisto = Histogram(-0.5, 20.5, 21);
+}
+
 void writeStats()
 {
 	auto total = Clock.currAppTick;
 	writefln("c =============================== stats ===============================");
+
+	if(config.watchStats)
+	{
+		writefln("watch-list size:");
+		watchHisto.write;
+	}
+
 	writefln("c tarjan     %#6.2f s (%#4.1f %%)", swTarjan.peek.msecs/1000.0f, 100f*swTarjan.peek.msecs/total.msecs);
 	writefln("c xor        %#6.2f s (%#4.1f %%)", swXor.peek.msecs/1000.0f, 100f*swXor.peek.msecs/total.msecs);
 	writefln("c subsume    %#6.2f s (%#4.1f %%)", swSubsume.peek.msecs/1000.0f, 100f*swSubsume.peek.msecs/total.msecs);

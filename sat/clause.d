@@ -1,7 +1,8 @@
 module sat.clause;
 
-import std.algorithm : join, swap, map, sort;
-import jive.array;
+private import std.algorithm : join, swap, map, sort;
+private import jive.array;
+private import math.histogram;
 
 import sat.types;
 
@@ -240,5 +241,14 @@ final class ClauseStorage
 				if((r = dg(this[i])) != 0)
 					return r;
 		return 0;
+	}
+
+	Histogram histogram(bool learnt)
+	{
+		auto h = Histogram(0.5, 16.5, 16);
+		foreach(ref c; this)
+			if(c.irred != learnt)
+				h.add(c.length);
+		return h;
 	}
 }

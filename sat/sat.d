@@ -8,10 +8,12 @@ private import std.array : join;
 private import std.conv : to;
 private import std.algorithm : map;
 
-import jive.array;
-import jive.bitarray;
-import jive.lazyarray;
-import jive.queue;
+private import jive.array;
+private import jive.bitarray;
+private import jive.lazyarray;
+private import jive.queue;
+
+private import math.histogram;
 
 public import sat.stats, sat.types, sat.clause, sat.solution;
 
@@ -342,28 +344,18 @@ final class Sat
 
 	void writeStatsLine()
 	{
-		long nBin, nLong, nLearnt, nLitsLong, nLitsLearnt;
+		auto histIrred = clauses.histogram(false);
+		auto histLearnt = clauses.histogram(true);
 
+		long nBin = 0;
 		for(int i = 0; i < varCount; ++i)
 		{
 			nBin += bins[Lit(i,false)].length;
 			nBin += bins[Lit(i,true)].length;
 		}
-		nBin /= 2;
 
-		foreach(ref c; clauses)
-			if(c.irred)
-			{
-				nLitsLong += c.length;
-				++nLong;
-			}
-			else
-			{
-				nLitsLearnt += c.length;
-				++nLearnt;
-			}
-
-		writefln("c ║ %#9s │ %#8s │ %#8s │ %#8s %#5.1f │ %#8s %#5.1f ║", nConflicts, varCount, nBin, nLong, cast(float)nLitsLong/nLong, nLearnt, cast(float)nLitsLearnt/nLearnt);
+		writefln("c ║ %#9s │ %#8s │ %#8s │ %#8s %#5.1f │ %#8s %#5.1f ║", nConflicts, varCount,
+		         nBin, histIrred.count, histIrred.avg, histLearnt.count, histLearnt.avg);
 	}
 
 	void writeStatsFooter()

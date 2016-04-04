@@ -15,12 +15,6 @@ private int luby(int i)
 		return luby(i-(1<<bsr(i))+1);
 }
 
-struct config
-{
-	static:
-	bool binarySubsume = false;
-}
-
 /**
  *  solves a sat problem.
  *  afterwards, sat will either have a contradiction or a solution

@@ -248,6 +248,8 @@ final class Searcher
 			auto x = stack[pos++];
 
 			// propagate long clauses
+			if(config.watchStats)
+				watchHisto.add(watches[x.neg].length);
 			outer: foreach(i, ref bool rem; &watches[x.neg].prune)
 			{
 				auto c = sat.clauses[i][];

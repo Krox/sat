@@ -17,6 +17,7 @@ int main(string[] args)
 {
 	getopt(args,
 		"binary-subsume", &config.binarySubsume,
+		"watch-stats", &config.watchStats,
 		);
 
 	if(args.length != 2 && args.length != 3)
@@ -24,6 +25,8 @@ int main(string[] args)
 		writefln("usage: sat <cnf input> [solution output]");
 		return -1;
 	}
+
+	initStats();
 
 	writefln("c cnf file: %s", args[1]);
 
