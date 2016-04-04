@@ -11,29 +11,29 @@ struct lbool
 		val = b;
 	}
 
-	private this(byte v) pure nothrow
+	private this(byte v) pure nothrow @safe
 	{
 		val = v;
 	}
 
-	bool opCast(T)() const pure nothrow
+	bool opCast(T)() const pure nothrow @safe
 		if(is(T == bool))
 	{
 		return val == 1;
 	}
 
-	lbool opUnary(string op)() const pure nothrow
+	lbool opUnary(string op)() const pure nothrow @safe
 		if(op == "~")
 	{
 		return lbool((val^1)&~(val>>1));
 	}
 
-	bool opEquals(bool b) const pure nothrow
+	bool opEquals(bool b) const pure nothrow @safe
 	{
 		return val == cast(byte)b;
 	}
 
-	bool opEquals(lbool b) const pure nothrow
+	bool opEquals(lbool b) const pure nothrow @safe
 	{
 		return val == b.val;
 	}
@@ -62,48 +62,48 @@ struct Lit
 	static assert(Lit.sizeof == uint.sizeof);
 	// NOTE: don't use std.bitmanip:bitfields. The asserts it contains are more annoying than helpful
 
-	this(uint v, bool s)
+	this(uint v, bool s) nothrow @safe
 	{
 		toInt = (v<<1) | s;
 	}
 
-	this(uint i)
+	this(uint i) nothrow @safe
 	{
 		toInt = i;
 	}
 
-	uint var() const @property
+	uint var() const nothrow @property @safe
 	{
 		return toInt >> 1;
 	}
 
-	void var(uint v) @property
+	void var(uint v) nothrow @property @safe
 	{
 		toInt = (toInt & 1) | (v << 1);
 	}
 
-	bool sign() const @property
+	bool sign() const nothrow @property @safe
 	{
 		return toInt & 1;
 	}
 
-	void sign(bool s) @property
+	void sign(bool s) nothrow @property @safe
 	{
 		toInt = (toInt & ~1) | s;
 	}
 
-	Lit neg() const @property
+	Lit neg() const nothrow @property @safe
 	{
 		return Lit(toInt ^ 1);
 	}
 
-	Lit opBinary(string op)(bool r) const
+	Lit opBinary(string op)(bool r) const nothrow @safe
 		if(op == "^")
 	{
 		return Lit(toInt^r);
 	}
 
-	int toDimacs() const @property
+	int toDimacs() const nothrow @property @safe
 	{
 		if(sign)
 			return -(var+1);
@@ -111,7 +111,7 @@ struct Lit
 			return var+1;
 	}
 
-	string toString() const @property
+	string toString() const @property @safe
 	{
 		switch(this.toInt)
 		{
@@ -123,7 +123,7 @@ struct Lit
 		}
 	}
 
-	static Lit fromDimacs(int x)
+	static Lit fromDimacs(int x) nothrow @safe
 	{
 		if(x > 0)
 			return Lit(x-1, false);
@@ -138,12 +138,12 @@ struct Lit
 	static assert(one.fixed);
 	static assert(zero.fixed);
 
-	bool fixed() const @property
+	bool fixed() const nothrow @property @safe
 	{
 		return (toInt&~1) == -4;
 	}
 
-	bool proper() const @property
+	bool proper() const nothrow @property @safe
 	{
 		return (toInt & (1U<<31)) == 0;
 	}

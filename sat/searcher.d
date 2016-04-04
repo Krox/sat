@@ -18,37 +18,43 @@ struct Reason
 {
 	enum
 	{
-		_init = 0,
-		nil,
-		unary,
-		binary,
-		clause
+		nil = 0x0000_0000_U,
+		binary = 0x4000_0000_U,
+		clause = 0x8000_0000_U,
 	}
 
-	int type;
-	union { Lit lit2; CRef n; }
+	enum dataMask = 0x3FFF_FFFF_U;
+	enum typeMask = 0xC000_0000_U;
 
-	static enum Reason undef = make(_init);
-	static enum Reason decision = make(nil);
-	static enum Reason unit = make(unary);
+	uint data = nil;
 
-	static Reason make(int type)
+	uint type() const nothrow @property @safe
 	{
-		Reason r;
-		r.type = type;
-		return r;
+		return data & typeMask;
 	}
+
+	CRef n() const nothrow @property @safe
+	{
+		return CRef(data & dataMask);
+	}
+
+	Lit lit2() const nothrow @property @safe
+	{
+		return Lit(data & dataMask);
+	}
+
+	static enum Reason undef = Reason.init;
 
 	this(Lit lit2)
 	{
-		this.type = binary;
-		this.lit2 = lit2;
+		assert((lit2.toInt & typeMask) == 0);
+		this.data = lit2.toInt | binary;
 	}
 
 	this(CRef n)
 	{
-		this.type = clause;
-		this.n = n;
+		assert((n.toInt & typeMask) == 0);
+		this.data = n.toInt | clause;
 	}
 }
 
@@ -125,7 +131,7 @@ final class Searcher
 		{
 			if(isSatisfied(l))
 				continue;
-			if(isSatisfied(l.neg) || !propagate(l, Reason.unit))
+			if(isSatisfied(l.neg) || !propagate(l, Reason.undef))
 			{
 				sat.addEmpty();
 				return;
@@ -155,7 +161,7 @@ final class Searcher
 				assert(false);
 
 			case 1:
-				return Reason.unit;
+				return Reason.undef;
 
 			case 2:
 				return Reason(c[1]);
@@ -333,7 +339,7 @@ final class Searcher
 
 			switch(reason(stack[i].var).type)
 			{
-				case Reason.unary:
+				case Reason.nil:
 					break;
 
 				case Reason.binary:
@@ -388,7 +394,7 @@ final class Searcher
 		auto r = reason(lit.var);
 		switch(r.type)
 		{
-			case Reason.unary: assert(false); //return true;
+			//case Reason.unary: assert(false); //return true;
 			case Reason.binary: return seen[r.lit2.var];
 			case Reason.clause:
 				foreach(l; sat.clauses[r.n])
@@ -452,7 +458,7 @@ final class Searcher
 
 			// propagate the decision
 			bumpLevel();
-			if(propagate(Lit(branch, sat.varData[branch].polarity), Reason.decision))
+			if(propagate(Lit(branch, sat.varData[branch].polarity), Reason.undef))
 				continue;
 
 			// analyze conflicts

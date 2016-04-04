@@ -148,20 +148,9 @@ static assert(Clause.sizeof == Lit.sizeof);
 
 struct CRef
 {
-	int v = -1;
+	uint toInt = 0x3FFF_FFFF_U;
 
-	int opCast(T)()
-		if(is(T == int))
-	{
-		return v;
-	}
-
-	bool proper() const @property
-	{
-		return v >= 0;
-	}
-
-	enum CRef undef = CRef(-1);
+	enum CRef undef = CRef(0x3FFF_FFFF_U);
 }
 
 final class ClauseStorage
@@ -178,7 +167,7 @@ final class ClauseStorage
 
 	ref Clause opIndex(CRef r)
 	{
-		void* ptr = &store[cast(int)r];
+		void* ptr = &store[r.toInt];
 		return *cast(Clause*)ptr;
 	}
 
