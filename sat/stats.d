@@ -6,22 +6,33 @@ module sat.stats;
 
 private import std.stdio;
 public import std.datetime : Clock, StopWatch;
-private import math.histogram;
+private import math.histogram, math.gnuplot;
 
 StopWatch swTarjan, swSubsume, swSubsumeBinary, swXor, swSolver, swVarElim, swCleanup, swSolverStartup;
 
-long nConflicts;
+long nLearnt;
 long nLitsOtfRemoved;
 long nLitsLearnt;
 
+// length of watchlists traversed
 Histogram watchHisto;
+
+// number of propagations/conflicts
+long nBinProps;
+long nBinConfls;
+long nLongProps;
+long nLongConfls;
+long nConflicts() { return nBinConfls + nLongConfls; }
 
 struct config
 {
 	static:
+	// features of the solver
 	bool binarySubsume = false;
-	bool watchStats = false;
 	int otf = 2;
+
+	// statistic output
+	bool watchStats = false;
 }
 
 void initStats()
@@ -32,19 +43,22 @@ void initStats()
 
 void writeStats()
 {
-	auto total = Clock.currAppTick;
-	writefln("c =============================== stats ===============================");
-
 	if(config.watchStats)
 	{
-		writefln("watch-list size:");
-		watchHisto.write;
+		auto plot = new Gnuplot;
+		plot.plot(watchHisto, "watch-list size");
 	}
 
-	writefln("c conflicts: %s", nConflicts);
-	if(config.otf > 0)
-		writefln("c otf removed %4.1f %% of literals", 100f*nLitsOtfRemoved/nLitsLearnt);
+	writefln("c ========================= propagation stats =========================");
+	writefln("c watchlist size: %#10.2f", watchHisto.avg);
+	writefln("c binary props:   %#10s", nBinProps);
+	writefln("c binary confls:  %#10s", nBinConfls);
+	writefln("c long props:     %#10s (%#4.1f %% of watches)", nLongProps, 100f*nLongProps/watchHisto.sum);
+	writefln("c long confls:    %#10s (%#4.1f %% of watches)", nLongConfls, 100f*nLongConfls/watchHisto.sum);
+	writefln("c clauses learnt: %#10s (%#4.1f %% shortened by otf)", nLearnt, 100f*nLitsOtfRemoved/nLitsLearnt);
 
+	writefln("c ============================ time stats =============================");
+	auto total = Clock.currAppTick;
 	writefln("c tarjan     %#6.2f s (%#4.1f %%)", swTarjan.peek.msecs/1000.0f, 100f*swTarjan.peek.msecs/total.msecs);
 	writefln("c xor        %#6.2f s (%#4.1f %%)", swXor.peek.msecs/1000.0f, 100f*swXor.peek.msecs/total.msecs);
 	writefln("c subsume    %#6.2f s (%#4.1f %%)", swSubsume.peek.msecs/1000.0f, 100f*swSubsume.peek.msecs/total.msecs);

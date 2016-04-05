@@ -223,11 +223,15 @@ final class Searcher
 			{
 				// not set -> propagate
 				if(value(y.var) == lbool.undef)
+				{
+					nBinProps++;
 					set(y, Reason(x.neg));
+				}
 
 				// set wrong -> conflict
 				else if(isSatisfied(y.neg))
 				{
+					nBinConfls++;
 					_conflict[0] = x.neg;
 					_conflict[1] = y;
 					conflict = _conflict[0..2];
@@ -254,8 +258,7 @@ final class Searcher
 			auto x = stack[pos++];
 
 			// propagate long clauses
-			if(config.watchStats)
-				watchHisto.add(watches[x.neg].length);
+			watchHisto.add(watches[x.neg].length);
 			outer: foreach(i, ref bool rem; &watches[x.neg].prune)
 			{
 				auto c = sat.clauses[i][];
@@ -280,9 +283,13 @@ final class Searcher
 
 				if(isSatisfied(c[1].neg)) // all literals false -> conflict
 				{
+					nLongConfls++;
+
 					conflict = c;
 					return false;
 				}
+
+				nLongProps++;
 
 				if(!propagateBinary(c[1], Reason(i))) // clause is unit -> propagate it
 					return false;
@@ -517,7 +524,7 @@ final class Searcher
 				auto conflictClause = analyzeConflict();
 				auto reason = addClause(conflictClause[]);
 				--numConflicts;
-				++nConflicts;
+				++nLearnt;
 				//writefln("conflict: %s", conflictClause[]);
 
 				if(conflictClause.length == 1)
