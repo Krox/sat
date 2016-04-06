@@ -49,7 +49,7 @@ final class Sat
 	// clauses
 	bool contradiction; // empty clause
 	Array!Lit units; // unit clauses
-	Array!(Array!Lit) bins; // binary clauses
+	Array!(Array!(Lit,uint)) bins; // binary clauses
 	ClauseStorage clauses; // len >= 3 clauses
 
 	this(int varCount)
@@ -159,7 +159,7 @@ final class Sat
 		}
 
 		// new bin content (may lead to units already in new name)
-		auto newBins = Array!(Array!Lit)(newVarCount*2);
+		auto newBins = Array!(Array!(Lit,uint))(newVarCount*2);
 		foreach(i, ref list; bins)
 		{
 			Lit a = trans[Lit(cast(int)i).var]^Lit(cast(int)i).sign; // new name for Literal i

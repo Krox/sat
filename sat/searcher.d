@@ -88,7 +88,7 @@ final class Searcher
 
 	// NOTE: these are static just to save some allocation time
 	static Array!VarData varData;
-	static Array!(Array!CRef) watches; // watches into long clauses
+	static Array!(Array!(CRef,uint)) watches; // watches into long clauses
 	Array!Lit stack; // trail of set variables
 	Array!int savePoint; // indices into stack
 	static PriorityQueue!(int, ActivityComp, true) activityHeap; // variables by activity for branch decision
@@ -113,7 +113,7 @@ final class Searcher
 		this.sat = sat;
 		assert(varCount > 0);
 
-		watches.assign(2*varCount, Array!CRef.init);
+		watches.assign(2*varCount, Array!(CRef,uint).init);
 		varData.assign(varCount, VarData.init);
 		seen.resize(varCount);
 		activityHeap.pred = ActivityComp(sat);
