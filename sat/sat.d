@@ -3,7 +3,7 @@ module sat.sat;
 private import core.bitop : popcnt;
 
 private import std.stdio;
-private import std.algorithm : move, min, max, sort, swap;
+private import std.algorithm : move, min, max, sort, swap, canFind;
 private import std.array : join;
 private import std.conv : to;
 private import std.algorithm : map;
@@ -137,6 +137,89 @@ final class Sat
 		bins[a].pushBack(b);
 		bins[b].pushBack(a);
 		return CRef.undef;
+	}
+
+	/** add clauses encoding that k or more of the literals in c should be true */
+	void addMinClause(const Lit[] c, int k, bool irred)
+	{
+		if(k <= 0)
+			return;
+
+		if(k == 1)
+		{
+			addClause(c, irred);
+			return;
+		}
+
+		if(k == c.length)
+		{
+			foreach(x; c)
+				addUnary(x);
+			return;
+		}
+
+		if(k > c.length)
+		{
+			addEmpty();
+			return;
+		}
+
+		Array!Lit cl;
+		assert(c.length <= 30);
+		for(int sig = 0; sig < (1<<c.length); ++sig)
+			if(popcnt(sig) == c.length-k+1)
+			{
+				cl.clear();
+				for(int i = 0; i < c.length; ++i)
+					if(sig & (1<<i))
+						cl.pushBack(c[i]);
+				addClause(cl[], irred);
+			}
+	}
+
+	/** add clauses encoding that at most k of the literals in c should be true */
+	void addMaxClause(const Lit[] c, int k, bool irred)
+	{
+		if(k >= c.length)
+			return;
+
+		if(k == 0)
+		{
+			foreach(x; c)
+				addUnary(x.neg);
+			return;
+		}
+
+		if(k < 0)
+		{
+			addEmpty();
+			return;
+		}
+
+		Array!Lit cl;
+		assert(c.length <= 30);
+		for(int sig = 0; sig < (1<<c.length); ++sig)
+			if(popcnt(sig) == k+1)
+			{
+				cl.clear();
+				for(int i = 0; i < c.length; ++i)
+					if(sig & (1<<i))
+						cl.pushBack(c[i].neg);
+				addClause(cl[], irred);
+			}
+	}
+
+	/** add clauses encoding that k of the literals in c should be true */
+	void addCardClause(const Lit[] c, const int[] ks, bool irred)
+	{
+		auto cl = Array!Lit(c.length);
+		for(int mask = 0; mask < (1<<c.length); ++mask)
+			if(!canFind(ks, popcnt(mask)))
+			{
+				for(int i = 0; i < c.length; ++i)
+					cl[i] = c[i]^((mask & (1<<i)) != 0);
+				addClause(cl[], irred);
+			}
 	}
 
 	/** renumber according to trans, which should map old-var to new-lit */
