@@ -84,6 +84,7 @@ final class Searcher
 		lbool value = lbool.undef;
 		int level; // only valid for assigned variables
 		Reason reason = Reason.undef; // ditto
+		Lit dom = Lit.undef; // ditto
 	}
 
 	// NOTE: these are static just to save some allocation time
@@ -98,9 +99,10 @@ final class Searcher
 	Lit[] conflict; // conflict encountered, only valid after propagate(...) returned false
 	private Lit[3] _conflict;
 
-	ref lbool value(int i) const { return varData[i].value; }
-	ref Reason reason(int i) const { return varData[i].reason; }
-	ref int level(int i) const { return varData[i].level; }
+	ref lbool value(int i) { return varData[i].value; }
+	ref Reason reason(int i) { return varData[i].reason; }
+	ref Lit dom(int i) { return varData[i].dom; }
+	ref int level(int i) { return varData[i].level; }
 	bool isSatisfied(Lit l) const { return varData[l.var].value == lbool(!l.sign); }
 	int currLevel() const @property { return cast(int) savePoint.length; }
 
@@ -173,6 +175,13 @@ final class Searcher
 		}
 	}
 
+	/** ditto */
+	Reason addBinary(Lit a, Lit b)
+	{
+		sat.addBinary(a, b);
+		return Reason(b);
+	}
+
 	void bumpLevel()
 	{
 		savePoint.pushBack(cast(int)stack.length);
@@ -195,24 +204,22 @@ final class Searcher
 	}
 
 	/* set a (previously unset) variable */
-	private void set(Lit x, Reason r)
+	private void set(Lit x, Reason r, Lit d)
 	{
 		assert(value(x.var) == lbool.undef);
 		value(x.var) = lbool(!x.sign);
 		stack.pushBack(x);
 		level(x.var) = currLevel;
 		reason(x.var) = r;
+		dom(x.var) = d;
 		sat.varData[x.var].polarity = x.sign;
 	}
 
 	/** set a (previously unset) variable and propagate binaries. False on conflict. */
-	private bool propagateBinary(Lit _x, Reason reason)
+	private bool propagateBinary(Lit root, Reason reason)
 	{
-		assert(value(_x.var) == lbool.undef);
-
 		size_t pos = stack.length;
-
-		set(_x, reason);
+		set(root, reason, root);
 
 		while(pos != stack.length)
 		{
@@ -225,7 +232,7 @@ final class Searcher
 				if(value(y.var) == lbool.undef)
 				{
 					nBinProps++;
-					set(y, Reason(x.neg));
+					set(y, Reason(x.neg), root);
 				}
 
 				// set wrong -> conflict
@@ -263,25 +270,26 @@ final class Searcher
 			{
 				auto c = sat.clauses[i][];
 
-				// move current variable to front position
-				if(x.neg == c[1])
+				// move current variable to position 1
+				// (so that c[0] is the potentially propagated one)
+				if(x.neg == c[0])
 					swap(c[0], c[1]);
-				assert(x.neg == c[0]);
+				assert(x.neg == c[1]);
 
 				// other watch satisfied -> do nothing
-				if(isSatisfied(c[1]))
+				if(isSatisfied(c[0]))
 					continue outer;
 
 				foreach(ref y; c[2..$])
 					if(!isSatisfied(y.neg)) // literal satisfied or undef -> move watch
 					{
-						swap(c[0], y);
-						watches[c[0]].pushBack(i);
+						swap(c[1], y);
+						watches[c[1]].pushBack(i);
 						rem = true;
 						continue outer;
 					}
 
-				if(isSatisfied(c[1].neg)) // all literals false -> conflict
+				if(isSatisfied(c[0].neg)) // all literals false -> conflict
 				{
 					nLongConfls++;
 
@@ -290,13 +298,77 @@ final class Searcher
 				}
 
 				nLongProps++;
+				auto reason = Reason(i);
 
-				if(!propagateBinary(c[1], Reason(i))) // clause is unit -> propagate it
+				// try to replace long propagation by binary propagation
+				if(config.hyperBinary)
+				{
+					auto dom = dominator(c[1..$]);
+					if(dom != Lit.undef)
+					{
+						++nHyperBinary;
+						reason = addBinary(c[0], dom.neg);
+					}
+				}
+
+				if(!propagateBinary(c[0], Reason(i))) // clause is unit -> propagate it
 					return false;
 			}
 		}
 
 		return true;
+	}
+
+	/** common dominator of assigned literals. Lit.undef if there is none */
+	Lit dominator(Lit[] lits)
+	{
+		assert(lits.length >= 2); // pointless to do otherwise
+
+		// check that a common dominator exists
+		Lit d = Lit.undef;
+		foreach(x; lits[])
+			if(level(x.var) != 0)
+			{
+				if(d == Lit.undef)
+					d = dom(x.var);
+				else if(d != dom(x.var))
+					return Lit.undef;
+			}
+		return d;
+		seen.reset();
+		int count = 0;
+
+		foreach(l; lits[])
+		{
+			if(level(l.var) == 0 || seen[l.var])
+				continue;
+			++count;
+			seen[l.var] = true;
+		}
+
+		foreach_reverse(x; stack[])
+		{
+			if(!seen[x.var])
+				continue;
+
+			if(--count == 0)
+			{
+				assert(dom(x.var) == d);
+				return x;
+			}
+
+			assert(reason(x.var).type == Reason.binary);
+			auto y = reason(x.var).lit2;
+			if(level(y.var) == 0 || seen[y.var])
+				continue;
+
+			++count;
+			seen[y.var] = true;
+		}
+		assert(false);
+
+
+		return dom(lits[0].var);
 	}
 
 	/**
@@ -421,42 +493,17 @@ final class Searcher
 			// otherwise, try to resolve it
 			case Reason.binary:
 				assert(r.lit2 != lit);
-				//writefln("%s -> %s", lit, r.lit2);
 				return seen[r.lit2.var] || (config.otf >= 2 && isRedundant(r.lit2));
 			case Reason.clause:
-				//writefln("%s -> %s", lit, sat.clauses[r.n][]);
 				foreach(l; sat.clauses[r.n])
 					if(l != lit && !seen[l.var] && !(config.otf >= 2 && isRedundant(l)))
 						return false;
 				seen[lit.var] = true;
 				return true;
 
-
-
 			default: assert(false);
 		}
 	}
-
-	// helper for OTF strengthening
-	/+private bool isRedundant(Lit lit)
-	{
-		if(level(lit.var) == 0)
-			return true;
-		auto r = reason(lit.var);
-		switch(r.type)
-		{
-			//case Reason.unary: assert(false); //return true;
-			case Reason.binary: return seen[r.lit2.var];
-			case Reason.clause:
-				foreach(l; sat.clauses[r.n])
-				if(!seen[l.var])
-					return false;
-			return true;
-			case Reason.nil:
-				return false;
-			default: assert(false);
-		}
-	}+/
 
 	/** most active undefined variable. -1 if everything is assigned */
 	int mostActiveVariable()
