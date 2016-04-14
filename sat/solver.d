@@ -19,8 +19,9 @@ private int luby(int i)
  *  solves a sat problem.
  *  afterwards, sat will either have a contradiction or a solution
  */
-void solve(Sat sat)
+Solution solve(Sat sat)
 {
+	Solution sol;
 	long lastCleanup = 0;
 	// this is cheap, so just run it before starting up anything sophisticated
 	new TwoSat(sat).run();
@@ -38,7 +39,8 @@ void solve(Sat sat)
 		// run the CDCL searcher
 		if(searcher is null)
 			searcher = new Searcher(sat);
-		bool solved = searcher.run(luby(i)*100);
+
+		bool solved = searcher.run(luby(i)*100, sol);
 
 		if(solved)
 			break;
@@ -63,10 +65,12 @@ void solve(Sat sat)
 		}
 	}
 
-	if(!sat.contradiction)
+	if(sat.contradiction)
+		return null;
+	else
 	{
-		sat.cleanup;
-		assert(sat.varCount == 0);
-		sat.solution.extend();
+		assert(sol !is null),
+		assert(sol.complete);
+		return sol;
 	}
 }

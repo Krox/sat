@@ -529,7 +529,7 @@ final class Searcher
 	 *    - returns true if solution or contradiction was found
 	 *    - returns false if maximum number of conflicts was reached
 	 */
-	bool run(int numConflicts)
+	bool run(int numConflicts, ref Solution sol)
 	{
 		swSolver.start();
 		scope(exit)
@@ -546,10 +546,12 @@ final class Searcher
 			// no branch -> we are done
 			if(branch == -1)
 			{
+				sol = new Solution(sat.solution);
+
 				for(int v = 0; v < varCount; ++v)
 					if(varData[v].value != lbool.undef) // non-decision variables (e.g. fixed/removed in sat) don't need to be set
-						sat.addUnary(Lit(v, !cast(bool)varData[v].value));
-
+						sol.setLiteral(sat.toOuter(Lit(v, !cast(bool)varData[v].value)));
+				sol.extend();
 				unrollLevel(0);
 				return true;
 			}

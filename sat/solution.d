@@ -18,6 +18,12 @@ final class Solution
 		extension = new ClauseStorage;
 	}
 
+	this(Solution s)
+	{
+		assign = s.assign;
+		extension = new ClauseStorage(s.extension);
+	}
+
 	/** set a (previously unset) literal */
 	void setLiteral(Lit l)
 	{
@@ -44,6 +50,14 @@ final class Solution
 				assign[c[0].var] = Lit.one^c[0].sign;
 			}
 		}
+	}
+
+	bool complete() const @property
+	{
+		foreach(x; assign)
+			if(!x.fixed)
+				return false;
+		return true;
 	}
 
 	void print(File file) const

@@ -166,6 +166,12 @@ final class ClauseStorage
 		clauses.reserve(1024);
 	}
 
+	this(ClauseStorage c)
+	{
+		store = c.store;
+		clauses = c.clauses;
+	}
+
 	ref Clause opIndex(CRef r)
 	{
 		void* ptr = &store[r.toInt];

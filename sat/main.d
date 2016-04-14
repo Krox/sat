@@ -34,16 +34,16 @@ int main(string[] args)
 	auto sat = readDimacs(args[1]);
 	writefln("c read in %.2f s", Clock.currAppTick.msecs/1000.0f);
 
-	solve(sat);
+	auto sol = solve(sat);
 
-	if(!sat.contradiction)
+	if(sol !is null)
 	{
 		// verdict
 		writefln("s SATISFIABLE");
 
 		// print solution to file
 		if(args.length >= 3)
-			sat.solution.print(File(args[2], "w"));
+			sol.print(File(args[2], "w"));
 
 		// time statistics
 		writeStats();
