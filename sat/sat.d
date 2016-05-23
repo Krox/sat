@@ -14,6 +14,7 @@ private import jive.lazyarray;
 private import jive.queue;
 
 private import math.histogram;
+private import algo.graph;
 
 public import sat.stats, sat.types, sat.clause, sat.solution;
 
@@ -65,6 +66,41 @@ final class Sat
 	int varCount() const @property
 	{
 		return cast(int)varData.length;
+	}
+
+	static struct ImplicationGraph
+	{
+		const Sat sat;
+
+		int n() const @property
+		{
+			return 2 * sat.varCount;
+		}
+
+		static struct Range
+		{
+			const Sat sat;
+			Lit l;
+
+			int opApply(int delegate(int) dg) const
+			{
+				int r = 0;
+				foreach(y; sat.bins[l.neg])
+					if((r = dg(y.toInt)) != 0)
+						break;
+				return r;
+			}
+		}
+
+		auto succ(int x) const
+		{
+			return Range(sat, Lit(x));
+		}
+	}
+
+	auto implicationGraph() const
+	{
+		return ImplicationGraph(this);
 	}
 
 	void bumpVariableActivity(int v)
@@ -444,5 +480,24 @@ final class Sat
 	void writeStatsFooter()
 	{
 		writefln("c ╚═══════════╧══════════╧══════════╧════════════════╧════════════════╝");
+	}
+
+	void writeComponentStats() const
+	{
+		int isolated = 0;
+		Array!int s;
+
+		auto comps = Components(implicationGraph);
+		for(int i = 0; i < comps.nComps; ++i)
+			if(comps.compSize[i] == 1)
+				isolated++;
+			else
+				s.pushBack(comps.compSize[i]);
+
+		sort!"a>b"(s[]);
+		writef("c BIG components: ");
+		foreach(x; s[])
+			writef("%s ", x);
+		writefln("(%s isolated points)", isolated);
 	}
 }
