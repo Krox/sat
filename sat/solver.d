@@ -2,7 +2,7 @@ module sat.solver;
 
 private import std.stdio;
 
-private import sat.sat, sat.searcher, sat.twosat, sat.simplify;
+private import sat.sat, sat.searcher, sat.twosat, sat.simplify, sat.xor;
 
 private import core.bitop: bsr, popcnt;
 
@@ -26,6 +26,12 @@ Solution solve(Sat sat)
 	// this is cheap, so just run it before starting up anything sophisticated
 	new TwoSat(sat).run();
 	sat.cleanup();
+
+	if(config.xor)
+	{
+		solveXor(sat);
+		sat.cleanup;
+	}
 
 	sat.writeStatsHeader();
 
@@ -56,6 +62,12 @@ Solution solve(Sat sat)
 			sat.cleanup;
 			new TwoSat(sat).run();
 			sat.cleanup;
+
+			if(config.xor)
+			{
+				solveXor(sat);
+				sat.cleanup;
+			}
 
 			// some simplification based on subsumption
 			if(config.binarySubsume)

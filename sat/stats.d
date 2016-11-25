@@ -24,6 +24,8 @@ long nLongProps;
 long nLongConfls;
 long nConflicts() { return nBinConfls + nLongConfls; }
 long nHyperBinary;
+long nXorUnits;
+long nXorEqus;
 
 struct config
 {
@@ -32,6 +34,7 @@ struct config
 	bool binarySubsume = false;
 	int otf = 2;
 	bool hyperBinary = true;
+	bool xor = true;
 
 	// statistic output
 	bool watchStats = false;
@@ -58,6 +61,7 @@ void writeStats()
 	writefln("c long props:     %#10s (%#4.1f %% of watches)", nLongProps, 100f*nLongProps/watchHisto.sum);
 	writefln("c long confls:    %#10s (%#4.1f %% of watches)", nLongConfls, 100f*nLongConfls/watchHisto.sum);
 	writefln("c clauses learnt: %#10s (%#4.1f %% shortened by otf)", nLearnt, 100f*nLitsOtfRemoved/nLitsLearnt);
+	writefln("c xor results:    %#10s (%#4.1f %% units)", nXorUnits+nXorEqus, 100f*nXorUnits/(nXorUnits+nXorEqus));
 	writefln("c lazy hyperBins: %#10s", nHyperBinary);
 
 	writefln("c ============================ time stats =============================");

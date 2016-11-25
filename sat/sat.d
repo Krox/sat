@@ -397,8 +397,11 @@ final class Sat
 				{
 					if(a == Lit.zero)
 						addEmpty();
-
-					units.pushBack(a);
+					else
+					{
+						assert(a.proper);
+						units.pushBack(a);
+					}
 					rem = true;
 				}
 				else assert(x.proper);
@@ -463,8 +466,7 @@ final class Sat
 	/** renumber accoring to currently known unary clauses */
 	void renumber()
 	{
-		assert(!contradiction);
-		if(units.empty)
+		if(contradiction || units.empty)
 			return;
 
 		auto trans = Array!Lit(varCount, Lit.undef);
@@ -519,7 +521,7 @@ final class Sat
 	{
 		enum minLength = 4;
 		enum maxLength = 30;
-		
+
 		Array!CRef[maxLength+1] list;
 		foreach(i, ref c; clauses)
 			if(!c.irred && c.length > minLength)

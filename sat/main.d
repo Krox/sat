@@ -19,6 +19,8 @@ int main(string[] args)
 		"binary-subsume", &config.binarySubsume,
 		"otf", &config.otf,
 		"watch-stats", &config.watchStats,
+		"xor", &config.xor,
+		"hyperBinary", &config.hyperBinary,
 		);
 
 	if(args.length != 2 && args.length != 3)
