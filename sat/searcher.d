@@ -131,6 +131,7 @@ final class Searcher
 		// NOTE: add units _after_ adding long clauses to get consistent watches
 		foreach(l; sat.units)
 		{
+			assert(l.proper);
 			if(isSatisfied(l))
 				continue;
 			if(isSatisfied(l.neg) || !propagate(l, Reason.undef))
@@ -155,7 +156,7 @@ final class Searcher
 	 */
 	Reason addClause(const Lit[] c)
 	{
-		CRef i = sat.addClause(c, false);
+		CRef i = sat.addClauseRaw(c, false);
 
 		switch(c.length)
 		{
@@ -176,9 +177,9 @@ final class Searcher
 	}
 
 	/** ditto */
-	Reason addBinary(Lit a, Lit b)
+	Reason addClause(Lit a, Lit b)
 	{
-		sat.addBinary(a, b);
+		sat.addClause(a, b);
 		return Reason(b);
 	}
 
@@ -307,7 +308,7 @@ final class Searcher
 					if(dom != Lit.undef)
 					{
 						++nHyperBinary;
-						reason = addBinary(c[0], dom.neg);
+						reason = addClause(c[0], dom.neg);
 					}
 				}
 

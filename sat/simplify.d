@@ -69,7 +69,7 @@ class simplify
 		// if !a is reachable, a is a failed literal
 		if(seen[a.neg])
 		{
-			sat.addUnary(a.neg);
+			sat.addClause(a.neg);
 			++nFailedLits;
 			return;
 		}

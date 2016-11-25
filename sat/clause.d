@@ -188,7 +188,7 @@ final class ClauseStorage
 		return r;
 	}
 
-	CRef addBinary(Lit a, Lit b, bool irred)
+	CRef addClause(Lit a, Lit b, bool irred)
 	{
 		auto r = CRef(cast(int)store.length);
 		auto header = Clause(2, irred);

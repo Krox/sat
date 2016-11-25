@@ -24,9 +24,17 @@ final class Solution
 		extension = new ClauseStorage(s.extension);
 	}
 
+	Lit addVar()
+	{
+		Lit r = Lit(varCount, false);
+		assign.pushBack(Lit.undef);
+		return r;
+	}
+
 	/** set a (previously unset) literal */
 	void setLiteral(Lit l)
 	{
+		assert(l.proper);
 		assert(assign[l.var] == Lit.undef);
 		assign[l.var] = Lit.one^l.sign;
 	}
@@ -36,8 +44,8 @@ final class Solution
 	{
 		assert(assign[a.var] == Lit.undef);
 		assign[a.var] = Lit.elim;
-		extension.addBinary(a, b.neg, true);
-		extension.addBinary(a.neg, b, true);
+		extension.addClause(a, b.neg, true);
+		extension.addClause(a.neg, b, true);
 	}
 
 	void extend()

@@ -82,7 +82,7 @@ Sat readDimacs(string filename)
 			buf = stripLeft(buf);
 		}
 
-		sat.addClause(cl[], true);
+		sat.addClauseRaw(cl[], true);
 	}
 
 	return sat;

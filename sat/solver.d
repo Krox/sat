@@ -47,6 +47,10 @@ Solution solve(Sat sat)
 
 		while(sat.units.length >= 100) // TODO: tweak strategy (after optimizing searcher startup time)
 		{
+			//sat.clauses.histogram(true).write();
+			sat.clean(1000);
+			//sat.clauses.histogram(true).write();
+
 			lastCleanup = nConflicts;
 			delete searcher;
 

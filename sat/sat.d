@@ -53,7 +53,7 @@ final class Sat
 	Array!(Array!(Lit,uint)) bins; // binary clauses
 	ClauseStorage clauses; // len >= 3 clauses
 
-	this(int varCount)
+	this(int varCount = 0)
 	{
 		clauses = new ClauseStorage;
 		solution = new Solution(varCount);
@@ -66,6 +66,31 @@ final class Sat
 	int varCount() const @property
 	{
 		return cast(int)varData.length;
+	}
+
+	Lit addVar()
+	{
+		if(varCount != solution.varCount)
+			throw new Exception("variable addition after renumbering not supported");
+		Lit r = solution.addVar();
+		varData.pushBack(VarData(0,false,r));
+		bins.pushBack(Array!(Lit,uint).init);
+		bins.pushBack(Array!(Lit,uint).init);
+		return r;
+	}
+
+	size_t clauseCount() @property
+	{
+		size_t r = 0;
+		if(contradiction)
+			r += 1;
+		foreach(ref c; clauses)
+			r += 1;
+		for(int i = 0; i < varCount*2; ++i)
+			foreach(l; bins[Lit(i)])
+				if(i >= l)
+					++r;
+		return r;
 	}
 
 	static struct ImplicationGraph
@@ -131,26 +156,63 @@ final class Sat
 	 *  assumes/asserts clause is syntactically well-formed (no duplicate variable)
 	 *  returns index of new clause or CRef.undef for small implicit ones
 	 */
-	CRef addClause(const Lit[] c, bool irred)
+	CRef addClauseRaw(const Lit[] c, bool irred)
 	{
 		// NOTE: do not sort the clause: c[0], c[1] might be there for a reason.
 
 		// check it is well formed
 		for(int i = 0; i < c.length; ++i)
+		{
+			assert(c[i].proper);
 			for(int j = i+1; j < c.length; ++j)
 				assert(c[i].var != c[j].var);
+		}
 
 		// special case for small stuff
 		switch(c.length)
 		{
 			case 0: return addEmpty();
-			case 1: return addUnary(c[0]);
-			case 2: return addBinary(c[0], c[1]);
+			case 1: return addClause(c[0]);
+			case 2: return addClause(c[0], c[1]);
 			default: break;
 		}
 
 		return clauses.addClause(c, irred);
 	}
+
+	/**
+	 *  normalize a clause (duplicate lits, tautologies) and add it to the problem
+	 *  returns index of new clause or CRef.undef for small implicit ones
+	 */
+	CRef addClause(const Lit[] c, bool irred)
+ 	{
+		auto cl = Array!Lit(c[]);
+		foreach(i, Lit l, ref bool rem; &cl.prune)
+		{
+			if(l == Lit.one)
+				return CRef.undef;
+			if(l == Lit.zero)
+			{
+				rem = true;
+				continue;
+			}
+
+			for(size_t j = i+1; j < cl.length; ++j)
+				if(l == cl[j])
+				{
+					rem = true;
+					continue;
+				}
+				else if(l == cl[j].neg)
+				{
+					return CRef.undef;
+				}
+		}
+
+		return addClauseRaw(cl[], irred);
+ 	}
+
+
 
 	/** ditto */
 	CRef addEmpty()
@@ -160,19 +222,43 @@ final class Sat
 	}
 
 	/** ditto */
-	CRef addUnary(Lit l)
+	CRef addClause(Lit l)
 	{
+		if(l == Lit.one)
+			return CRef.undef;
+		if(l == Lit.zero)
+			return addEmpty();
+
+		assert(l.proper);
 		units.pushBack(l);
 		return CRef.undef;
 	}
 
 	/** ditto */
-	CRef addBinary(Lit a, Lit b)
+	CRef addClause(Lit a, Lit b)
 	{
+		if(a == Lit.one || b == Lit.one)
+			return CRef.undef;
+		if(a == Lit.zero)
+			return addClause(b);
+		if(b == Lit.zero)
+			return addClause(a);
+
+		assert(a.proper && b.proper);
 		assert(a.var != b.var);
 		bins[a].pushBack(b);
 		bins[b].pushBack(a);
 		return CRef.undef;
+	}
+
+	/** ditto */
+	CRef addClause(Lit a, Lit b, Lit c, bool irred)
+	{
+		static Lit[3] cl;
+		cl[0] = a;
+		cl[1] = b;
+		cl[2] = c;
+		return addClause(cl[], irred);
 	}
 
 	/** add clauses encoding that k or more of the literals in c should be true */
@@ -190,7 +276,7 @@ final class Sat
 		if(k == c.length)
 		{
 			foreach(x; c)
-				addUnary(x);
+				addClause(x);
 			return;
 		}
 
@@ -222,7 +308,7 @@ final class Sat
 		if(k == 0)
 		{
 			foreach(x; c)
-				addUnary(x.neg);
+				addClause(x.neg);
 			return;
 		}
 
@@ -258,6 +344,18 @@ final class Sat
 			}
 	}
 
+	void addXorClause(const Lit[] c, bool sign, bool irred)
+	{
+		auto cl = Array!Lit(c.length);
+		for(int mask = 0; mask < (1<<c.length); ++mask)
+			if((popcnt(mask)+sign)%2 != 0)
+			{
+				for(int i = 0; i < c.length; ++i)
+					cl[i] = c[i]^((mask & (1<<i)) != 0);
+				addClause(cl[], irred);
+			}
+	}
+
 	/** renumber according to trans, which should map old-var to new-lit */
 	void renumber(const Lit[] trans, int newVarCount, bool hasDups)
 	{
@@ -273,7 +371,10 @@ final class Sat
 			if(x == Lit.one)
 				rem = true;
 			else if(x == Lit.zero)
+			{
 				addEmpty();
+				rem = true;
+			}
 			else assert(x.proper);
 		}
 
@@ -357,7 +458,6 @@ final class Sat
 					newVarData[trans[i].var].flip;
 			}
 		varData = move(newVarData);
-
 	}
 
 	/** renumber accoring to currently known unary clauses */
@@ -374,7 +474,10 @@ final class Sat
 			if(trans[x.var] == (Lit.one^x.sign))
 				continue;
 			else if(trans[x.var] == (Lit.zero^x.sign))
+			{
 				addEmpty();
+				continue;
+			}
 			else
 				assert(trans[x.var] == Lit.undef);
 
@@ -407,25 +510,58 @@ final class Sat
 			}
 	}
 
-	void dump()
+	/*
+	 * remove some learnt clauses in order to not let it grow too much
+	 * decisions are made on clause length. < 4 is always kept, >= 30 is always
+	 * removes. Of those inbetween, the shortest n are kept.
+	 */
+	void clean(size_t n)
 	{
+		enum minLength = 4;
+		enum maxLength = 30;
+		
+		Array!CRef[maxLength+1] list;
+		foreach(i, ref c; clauses)
+			if(!c.irred && c.length > minLength)
+				if(c.length > maxLength)
+					c.remove;
+				else
+					list[c.length].pushBack(i);
+
+		for(int len = 0; len <= maxLength; ++len)
+		{
+			if(list[len].length > n)
+			{
+				foreach(i; list[len][n..$])
+					clauses[i].remove;
+				n = 0;
+			}
+			else
+				n -= list[len].length;
+		}
+	}
+
+	void print(File file)
+	{
+		file.writefln("p cnf %s %s", varCount, clauseCount);
+
 		// empty clause
 		if(contradiction)
-			writefln("0");
+			file.writefln("0");
 
 		// unary clauses
 		foreach(a; units)
-			writefln("%s 0", a);
+			file.writefln("%s 0", a);
 
 		// binary clauses
 		for(int i = 0; i < varCount*2; ++i)
 			foreach(l; bins[Lit(i)])
 				if(i >= l)
-					writefln("%s %s 0", Lit(i), l);
+					file.writefln("%s %s 0", Lit(i), l);
 
 		// long clauses
 		foreach(ref c; clauses)
-			writefln("%s 0", c.toString);
+			file.writefln("%s 0", c.toString);
 	}
 
 	bool checkSolution(ref const BitArray sol)
