@@ -37,6 +37,8 @@ int main(string[] args)
 	bool readDir = isDir(cnfFolder);
 	if(readDir)
 		filenames = array(splitter(executeShell("find "~cnfFolder~" -type f").output, "\n"));
+	else if(cnfFolder[$-4..$] == ".cnf")
+		filenames = [cnfFolder];
 	else
 		filenames = cnfFolder.readText.splitter("\n").map!"a.find(\" \")".array;
 

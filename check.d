@@ -1,4 +1,4 @@
-#!/usr/bin/rdmd --shebang --compiler=ldc2 -O -I../jive -I../math
+#!/usr/bin/rdmd --shebang -O -I../jive -I../math -I../algo
 module check;
 
 import std.stdio;
