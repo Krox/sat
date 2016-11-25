@@ -28,7 +28,6 @@ Solution solve(Sat sat)
 	sat.cleanup();
 
 	sat.writeStatsHeader();
-	sat.writeStatsLine();
 
 	scope(exit)
 		sat.writeStatsFooter();
@@ -36,36 +35,37 @@ Solution solve(Sat sat)
 	Searcher searcher = null;
 	for(int i = 1; ; ++i)
 	{
-		// run the CDCL searcher
 		if(searcher is null)
 			searcher = new Searcher(sat);
 
+		// run the CDCL searcher
+		sat.writeStatsLine();
 		bool solved = searcher.run(luby(i)*100, sol);
 
 		if(solved)
 			break;
 
-		while(sat.units.length >= 100) // TODO: tweak strategy (after optimizing searcher startup time)
+		// occasionally do some simplification and cleaning
+		// TODO: tweak policy when to do this and how much clause cleaning to do
+		while(sat.units.length >= 100 || nConflicts >= lastCleanup+1000)
 		{
-			//sat.clauses.histogram(true).write();
-			sat.clean(1000);
-			//sat.clauses.histogram(true).write();
-
 			lastCleanup = nConflicts;
 			delete searcher;
 
+			// implement units, replace equivalent literals and renumber everything
 			sat.cleanup;
-
 			new TwoSat(sat).run();
 			sat.cleanup;
 
+			// some simplification based on subsumption
 			if(config.binarySubsume)
 			{
 				simplify(sat);
 				sat.cleanup;
 			}
 
-			sat.writeStatsLine();
+			// remove some learnt clauses
+			sat.clean(nConflicts/3);
 		}
 	}
 
