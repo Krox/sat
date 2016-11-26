@@ -466,7 +466,18 @@ final class Sat
 	/** renumber accoring to currently known unary clauses */
 	void renumber()
 	{
-		if(contradiction || units.empty)
+		// contradiction -> remove all clauses
+		if(contradiction)
+		{
+			foreach(ref l; bins[])
+				l.resize(0);
+			foreach(ref c; clauses)
+				c.remove();
+			units.resize(0);
+			return;
+		}
+
+		if(units.empty)
 			return;
 
 		auto trans = Array!Lit(varCount, Lit.undef);

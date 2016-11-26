@@ -99,6 +99,10 @@ class TwoSat
 		if(nComps == sat.varCount)
 			return;
 
+		// contradiction found -> don't bother to renumber (also equ[] is not fully built)
+		if(sat.contradiction)
+			return;
+
 		sat.renumber(equ[], nComps, true);
 	}
 
