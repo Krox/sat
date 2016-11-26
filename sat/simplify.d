@@ -54,16 +54,29 @@ class simplify
 		// mark all literals reachable from a
 		seen.reset();
 		assert(stack.empty);
-		stack.pushBack(a);
+
 		seen[a] = true;
-		while(!stack.empty)
-			foreach(b; sat.bins[stack.popBack().neg])
-				if(!seen[b])
-				{
-					seen[b] = true;
-					stack.pushBack(b);
-					++nImplications;
-				}
+		foreach(b, ref bool rem; &sat.bins[a.neg].prune)
+		{
+			assert(b != a);
+			if(seen[b])
+			{
+				rem = true;
+				++nBinaryReduction;
+				continue;
+			}
+			stack.pushBack(b);
+			seen[b] = true;
+
+			while(!stack.empty)
+				foreach(c; sat.bins[stack.popBack().neg])
+					if(!seen[c])
+					{
+						seen[c] = true;
+						stack.pushBack(c);
+						++nImplications;
+					}
+		}
 		seen[a] = false;
 
 		// if !a is reachable, a is a failed literal

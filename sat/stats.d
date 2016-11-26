@@ -26,12 +26,13 @@ long nConflicts() { return nBinConfls + nLongConfls; }
 long nHyperBinary;
 long nXorUnits;
 long nXorEqus;
+long nBinaryReduction;
 
 struct config
 {
 	static:
 	// features of the solver
-	bool binarySubsume = false;
+	bool binarySubsume = true;
 	int otf = 2;
 	bool hyperBinary = true;
 	bool xor = true;
@@ -63,6 +64,7 @@ void writeStats()
 	writefln("c clauses learnt: %#10s (%#4.1f %% shortened by otf)", nLearnt, 100f*nLitsOtfRemoved/nLitsLearnt);
 	writefln("c xor results:    %#10s (%#4.1f %% units)", nXorUnits+nXorEqus, 100f*nXorUnits/(nXorUnits+nXorEqus));
 	writefln("c lazy hyperBins: %#10s", nHyperBinary);
+	writefln("c trans binary:   %#10s", nBinaryReduction);
 
 	writefln("c ============================ time stats =============================");
 	auto total = Clock.currAppTick;
