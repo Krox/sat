@@ -13,7 +13,7 @@ private import jive.bitarray;
 private import jive.lazyarray;
 private import jive.queue;
 
-private import math.histogram;
+private import math.statistics;
 private import algo.graph;
 
 public import sat.stats, sat.types, sat.clause, sat.solution;

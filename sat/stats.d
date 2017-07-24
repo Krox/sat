@@ -6,7 +6,7 @@ module sat.stats;
 
 private import std.stdio;
 public import std.datetime : Clock, StopWatch;
-private import math.histogram, math.gnuplot;
+private import math.statistics, math.gnuplot;
 
 StopWatch swTarjan, swSubsume, swSubsumeBinary, swXor, swSolver, swVarElim, swCleanup, swSolverStartup;
 
@@ -52,7 +52,7 @@ void writeStats()
 	if(config.watchStats)
 	{
 		auto plot = new Gnuplot;
-		plot.plot(watchHisto, "watch-list size");
+		plot.plotHistogram(watchHisto, "watch-list size");
 	}
 
 	writefln("c ========================= propagation stats =========================");

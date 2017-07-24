@@ -3,7 +3,7 @@ module sat.clause;
 private import std.algorithm : swap, map, sort;
 private import std.array : join;
 private import jive.array;
-private import math.histogram;
+private import math.statistics;
 
 import sat.types;
 
