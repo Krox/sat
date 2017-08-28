@@ -6,7 +6,7 @@ private import std.range;
 private import std.algorithm;
 
 import jive.array;
-import jive.flatset;
+import sat.flatset;
 
 import sat.sat;
 import sat.stats;

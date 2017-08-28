@@ -336,6 +336,7 @@ final class Searcher
 					return Lit.undef;
 			}
 		return d;
+		/+ FIXME
 		seen.reset();
 		int count = 0;
 
@@ -370,6 +371,7 @@ final class Searcher
 
 
 		return dom(lits[0].var);
+		+/
 	}
 
 	/**

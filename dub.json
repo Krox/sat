@@ -1,0 +1,20 @@
+{
+	"name": "sat",
+	"description": "A basic SAT-solver.",
+	"authors": ["Simon Bürger"],
+	"homepage": "https://github.com/Krox/sat",
+	"license": "public domain",
+
+	"targetName": "sat",
+	"targetPath": "bin",
+	"targetType": "executable",
+
+	"sourcePaths": ["sat"],
+
+	"dependencies":
+	{
+		"jive": "0.0.1",
+		"math": "*",
+		"algo": "*",
+	},
+}

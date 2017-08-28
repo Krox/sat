@@ -536,10 +536,12 @@ final class Sat
 		Array!CRef[maxLength+1] list;
 		foreach(i, ref c; clauses)
 			if(!c.irred && c.length > minLength)
+			{
 				if(c.length > maxLength)
 					c.remove;
 				else
 					list[c.length].pushBack(i);
+			}
 
 		for(int len = 0; len <= maxLength; ++len)
 		{
