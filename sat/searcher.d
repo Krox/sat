@@ -9,8 +9,8 @@ import std.datetime : Clock;
 import std.algorithm : move, swap;
 
 import jive.array;
-import jive.lazyarray;
-import jive.priorityqueue;
+import jive.bitarray;
+import jive.priorityarray;
 
 import sat.sat;
 
@@ -89,12 +89,12 @@ final class Searcher
 
 	// NOTE: these are static just to save some allocation time
 	static Array!VarData varData;
-	static Array!(Array!(CRef,uint)) watches; // watches into long clauses
+	static Array!(Array!CRef) watches; // watches into long clauses
 	Array!Lit stack; // trail of set variables
 	Array!int savePoint; // indices into stack
-	static PriorityQueue!(int, ActivityComp, true) activityHeap; // variables by activity for branch decision
+	static PriorityArray!(double, "a > b") activityArray; // variables by activity for branch decision
 
-	static LazyBitArray seen; // temporary multi-purpose, one bit per variable, reset right before use
+	static BitArray seen; // temporary multi-purpose, one bit per variable, reset right before use
 
 	Lit[] conflict; // conflict encountered, only valid after propagate(...) returned false
 	private Lit[3] _conflict;
@@ -115,11 +115,10 @@ final class Searcher
 		this.sat = sat;
 		assert(varCount > 0);
 
-		watches.assign(2*varCount, Array!(CRef,uint).init);
+		watches.assign(2*varCount, Array!CRef.init);
 		varData.assign(varCount, VarData.init);
 		seen.resize(varCount);
-		activityHeap.pred = ActivityComp(sat);
-		activityHeap.clear();
+		activityArray = PriorityArray!(double, "a > b")(varCount);
 
 		foreach(i, ref c; sat.clauses)
 		{
@@ -142,10 +141,11 @@ final class Searcher
 		}
 
 		// add non-fixed variables to activity heap
-		activityHeap.reserve(varCount);
 		for(int i = 0; i < varCount; ++i)
 			if(value(i) == lbool.undef)
-				activityHeap.push(i);
+				activityArray[i] = sat.varData[i].activity;
+			else
+				activityArray[i] = -1;
 	}
 
 	/**
@@ -198,8 +198,7 @@ final class Searcher
 		{
 			Lit lit = stack.popBack;
 			value(lit.var) = lbool.undef;
-			if(lit.var !in activityHeap)
-				activityHeap.push(lit.var);
+			activityArray[lit.var] = sat.varData[lit.var].activity;
 		}
 		savePoint.resize(l);
 	}
@@ -267,7 +266,7 @@ final class Searcher
 
 			// propagate long clauses
 			watchHisto.add(watches[x.neg].length);
-			outer: foreach(i, ref bool rem; &watches[x.neg].prune)
+			outer: foreach(i, ref bool rem; watches[x.neg].prune)
 			{
 				auto c = sat.clauses[i][];
 
@@ -397,8 +396,8 @@ final class Searcher
 			seen[lit.var] = true;
 
 			sat.bumpVariableActivity(lit.var);
-			if(lit.var in activityHeap)
-				activityHeap.decrease(lit.var);
+			if(activityArray[lit.var] != -1)
+				activityArray[lit.var] = sat.varData[lit.var].activity;
 
 			if(level(lit.var) < currLevel) // reason side
 				buf.pushBack(lit);
@@ -450,7 +449,7 @@ final class Searcher
 
 		// strengthen the conflict clause using the reason clauses
 		if(config.otf >= 1)
-			foreach(k, lit, ref bool rem; &buf.prune)
+			foreach(k, lit, ref bool rem; buf.prune)
 			{
 				if(k == 0)
 					continue;
@@ -511,11 +510,14 @@ final class Searcher
 	/** most active undefined variable. -1 if everything is assigned */
 	int mostActiveVariable()
 	{
-		while(!activityHeap.empty)
+		while(activityArray.min != -1)
 		{
-			int v = activityHeap.pop;
+			int v = cast(int)activityArray.minIndex;
 			if(varData[v].value != lbool.undef)
+			{
+				activityArray[v] = -1;
 				continue;
+			}
 
 			// check the heap (very expensive, debug only)
 			//for(int i = 0; i < varCount; ++i)

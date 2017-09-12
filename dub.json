@@ -2,7 +2,7 @@
 	"name": "sat",
 	"description": "A basic SAT-solver.",
 	"authors": ["Simon Bürger"],
-	"homepage": "https://github.com/Krox/sat",
+	"homepage": "https://github.com/krox/sat",
 	"license": "public domain",
 
 	"targetName": "sat",
@@ -13,7 +13,7 @@
 
 	"dependencies":
 	{
-		"jive": "0.0.1",
+		"jive": "*",
 		"math": "*",
 		"algo": "*",
 	},

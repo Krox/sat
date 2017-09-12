@@ -10,7 +10,6 @@ private import std.algorithm : map;
 
 private import jive.array;
 private import jive.bitarray;
-private import jive.lazyarray;
 private import jive.queue;
 
 private import math.statistics;
@@ -50,7 +49,7 @@ final class Sat
 	// clauses
 	bool contradiction; // empty clause
 	Array!Lit units; // unit clauses
-	Array!(Array!(Lit,uint)) bins; // binary clauses
+	Array!(Array!Lit) bins; // binary clauses
 	ClauseStorage clauses; // len >= 3 clauses
 
 	this(int varCount = 0)
@@ -74,8 +73,8 @@ final class Sat
 			throw new Exception("variable addition after renumbering not supported");
 		Lit r = solution.addVar();
 		varData.pushBack(VarData(0,false,r));
-		bins.pushBack(Array!(Lit,uint).init);
-		bins.pushBack(Array!(Lit,uint).init);
+		bins.pushBack(Array!Lit.init);
+		bins.pushBack(Array!Lit.init);
 		return r;
 	}
 
@@ -187,7 +186,7 @@ final class Sat
 	CRef addClause(const Lit[] c, bool irred)
  	{
 		auto cl = Array!Lit(c[]);
-		foreach(i, Lit l, ref bool rem; &cl.prune)
+		foreach(i, Lit l, ref bool rem; cl.prune)
 		{
 			if(l == Lit.one)
 				return CRef.undef;
@@ -365,7 +364,7 @@ final class Sat
 			assert(x.fixed || (x.proper && x.var < newVarCount));
 
 		// renumber units
-		foreach(ref x, ref bool rem; &units.prune)
+		foreach(ref x, ref bool rem; units.prune)
 		{
 			x = trans[x.var]^x.sign;
 			if(x == Lit.one)
@@ -379,7 +378,7 @@ final class Sat
 		}
 
 		// new bin content (may lead to units already in new name)
-		auto newBins = Array!(Array!(Lit,uint))(newVarCount*2);
+		auto newBins = Array!(Array!Lit)(newVarCount*2);
 		foreach(i, ref list; bins)
 		{
 			Lit a = trans[Lit(cast(int)i).var]^Lit(cast(int)i).sign; // new name for Literal i
@@ -388,7 +387,7 @@ final class Sat
 				continue;
 
 			// translate the list
-			foreach(ref x, ref bool rem; &list.prune)
+			foreach(ref x, ref bool rem; list.prune)
 			{
 				x = trans[x.var]^x.sign;
 				if(x == Lit.one || x == a.neg) // (a or 1), (a or -a)

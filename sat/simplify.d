@@ -56,7 +56,7 @@ class simplify
 		assert(stack.empty);
 
 		seen[a] = true;
-		foreach(b, ref bool rem; &sat.bins[a.neg].prune)
+		foreach(b, ref bool rem; sat.bins[a.neg].prune)
 		{
 			assert(b != a);
 			if(seen[b])

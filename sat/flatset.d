@@ -147,7 +147,7 @@ struct FlatSet(V)
 		size_t i = find(v);
 		if(i == length)
 			return false;
-		vals.removeIndex(i);
+		vals.remove(i);
 		return true;
 	}
 }

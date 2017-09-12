@@ -162,7 +162,7 @@ final class XorSolver
 	/** put unit clauses and equivalences back into the cnf problem */
 	void implement()
 	{
-		foreach(ref c, ref bool rem; &clauses.prune)
+		foreach(ref c, ref bool rem; clauses.prune)
 			switch(c.length)
 			{
 				case 0:
