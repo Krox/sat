@@ -3,6 +3,7 @@
 obj/*
 bin/*
 old/*
+tmp*
 .dub/*
 dub.selections.json
 
@@ -11,6 +12,7 @@ dub.selections.json
 *.cbp
 
 cryptominisat
+lingeling
 minisat
 test*
 sat-2002-beta
