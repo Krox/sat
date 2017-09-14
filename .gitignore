@@ -3,12 +3,15 @@
 obj/*
 bin/*
 old/*
+.dub/*
+dub.selections.json
 
 *.pdf
-
 *.layout
 *.cbp
 
 cryptominisat
+minisat
 test*
 sat-2002-beta
+industrial-2007
