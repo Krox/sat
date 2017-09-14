@@ -113,7 +113,6 @@ final class Searcher
 			swSolverInit.stop();
 
 		this.sat = sat;
-		assert(varCount > 0);
 
 		watches.assign(2*varCount, Array!CRef.init);
 		varData.assign(varCount, VarData.init);
@@ -510,6 +509,9 @@ final class Searcher
 	/** most active undefined variable. -1 if everything is assigned */
 	int mostActiveVariable()
 	{
+		if(sat.varCount == 0)
+			return -1;
+
 		while(activityArray.min != -1)
 		{
 			int v = cast(int)activityArray.minIndex;
