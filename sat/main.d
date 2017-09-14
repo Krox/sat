@@ -1,7 +1,7 @@
 module sat.main;
 
 import std.stdio;
-import std.getopt : getopt;
+import std.getopt : getopt, defaultGetoptPrinter;
 import std.datetime : Clock;
 
 import sat.sat, sat.parser, sat.solver;
@@ -15,18 +15,19 @@ import sat.sat, sat.parser, sat.solver;
  */
 int main(string[] args)
 {
-	getopt(args,
-		"binary-subsume", &config.binarySubsume,
-		"otf", &config.otf,
-		"watch-stats", &config.watchStats,
-		"xor", &config.xor,
-		"hyperBinary", &config.hyperBinary,
+	auto helpInfo = getopt(args,
+		"binary-subsume", "Binary self-subsuming resolution on top-level.", &config.binarySubsume,
+		"xor", "Gaussian elimination of xor clauses on top-level.", &config.xor,
+		"otf", "Simplification of learnt clauses. (0=none, 1=basic, 2=full)", &config.otf,
+		"hyperBinary", "Lazy hyper-binary resolution.", &config.hyperBinary,
+		"watch-stats", "Keep and print statistics on watch-lists lengths.", &config.watchStats,
 		);
 
-	if(args.length != 2 && args.length != 3)
+	// if -h was passed, print help text and quit
+	if(helpInfo.helpWanted || (args.length != 2 && args.length != 3))
 	{
-		writefln("usage: sat <cnf input> [solution output]");
-		return -1;
+		defaultGetoptPrinter("usage: sat <cnf input> [solution output]", helpInfo.options);
+		return 0;
 	}
 
 	writefln("c cnf file: %s", args[1]);
