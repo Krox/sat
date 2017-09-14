@@ -4,9 +4,9 @@ module sat.stats;
  * global variables for configuration and statistics;
  */
 
-private import std.stdio;
-public import std.datetime : Clock, StopWatch;
-private import math.statistics, math.gnuplot;
+import std.stdio;
+import std.datetime : Clock, StopWatch;
+import std.algorithm;
 
 StopWatch swTarjan, swSubsume, swSubsumeBinary, swXor, swSolver, swVarElim, swCleanup, swSolverStartup;
 
@@ -41,18 +41,12 @@ struct config
 	bool watchStats = false;
 }
 
-void initStats()
-{
-	if(config.watchStats)
-		watchHisto = Histogram(-0.5, 20.5, 21);
-}
-
 void writeStats()
 {
 	if(config.watchStats)
 	{
-		auto plot = new Gnuplot;
-		plot.plotHistogram(watchHisto, "watch-list size");
+		writefln("c ========================== watchlist sizes ==========================");
+		watchHisto.write;
 	}
 
 	writefln("c ========================= propagation stats =========================");
@@ -77,4 +71,43 @@ void writeStats()
 	writefln("c solverInit %#6.2f s (%#4.1f %%)", swSolverStartup.peek.msecs/1000.0f, 100f*swSolverStartup.peek.msecs/total.msecs);
 	writefln("c solver     %#6.2f s (%#4.1f %%)", swSolver.peek.msecs/1000.0f, 100f*swSolver.peek.msecs/total.msecs);
 	writefln("c total      %#6.2f s", total.msecs/1000.0f);
+}
+
+struct Histogram
+{
+	enum limit = 21;
+
+	long[limit] hist;
+	long count = 0;
+	long countHigh = 0;
+	long sum = 0;
+	long max = long.min;
+
+	void add(long x)
+	{
+		assert(x >= 0);
+		count += 1;
+		sum += x;
+		max = std.algorithm.max(max, x);
+
+		if(x >= limit)
+			countHigh += 1;
+		else
+			hist[x] += 1;
+	}
+
+	double avg() const nothrow @property @safe
+	{
+		return cast(double)sum / count;
+	}
+
+	void write() const
+	{
+		foreach(i, c; hist)
+			writefln("c %s:\t%s", i, c);
+		if(countHigh)
+			writefln("c >:\t%s", countHigh);
+		writefln("c all:\t%s", count);
+		writefln("c avg = %s", avg);
+	}
 }

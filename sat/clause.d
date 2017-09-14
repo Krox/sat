@@ -1,10 +1,10 @@
 module sat.clause;
 
-private import std.algorithm : swap, map, sort;
-private import std.array : join;
-private import jive.array;
-private import math.statistics;
+import std.algorithm : swap, map, sort;
+import std.array : join;
+import jive.array;
 
+import sat.stats;
 import sat.types;
 
 struct Clause
@@ -241,7 +241,7 @@ final class ClauseStorage
 
 	Histogram histogram(bool learnt)
 	{
-		auto h = Histogram(0.5, 16.5, 16);
+		Histogram h;
 		foreach(ref c; this)
 			if(c.irred != learnt)
 				h.add(c.length);

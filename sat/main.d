@@ -29,8 +29,6 @@ int main(string[] args)
 		return -1;
 	}
 
-	initStats();
-
 	writefln("c cnf file: %s", args[1]);
 
 	auto sat = readDimacs(args[1]);

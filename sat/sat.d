@@ -1,19 +1,18 @@
 module sat.sat;
 
-private import core.bitop : popcnt;
+import core.bitop : popcnt;
 
-private import std.stdio;
-private import std.algorithm : move, min, max, sort, swap, canFind;
-private import std.array : join;
-private import std.conv : to;
-private import std.algorithm : map;
+import std.stdio;
+import std.algorithm : move, min, max, sort, swap, canFind;
+import std.array : join;
+import std.conv : to;
+import std.algorithm : map;
 
-private import jive.array;
-private import jive.bitarray;
-private import jive.queue;
+import jive.array;
+import jive.bitarray;
+import jive.queue;
+import algo.graph;
 
-private import math.statistics;
-private import algo.graph;
 
 public import sat.stats, sat.types, sat.clause, sat.solution;
 
