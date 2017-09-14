@@ -108,9 +108,9 @@ final class Searcher
 
 	this(Sat sat)
 	{
-		swSolverStartup.start();
+		swSolverInit.start();
 		scope(exit)
-			swSolverStartup.stop();
+			swSolverInit.stop();
 
 		this.sat = sat;
 		assert(varCount > 0);

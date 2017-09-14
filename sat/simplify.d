@@ -27,7 +27,7 @@ class simplify
 
 	void run()
 	{
-		swSubsumeBinary.start();
+		swSubsumeBin.start();
 
 		seen = BitArray(sat.varCount*2); // TODO: decide between lazy/normal
 
@@ -40,7 +40,7 @@ class simplify
 		for(int i = 0; i < sat.varCount*2; ++i)
 			binarySubsume(Lit(i));
 
-		swSubsumeBinary.stop();
+		swSubsumeBin.stop();
 	}
 
 	/** perform subsumption and self-subsuming resolution using implications a -> * (also find failed literals) */

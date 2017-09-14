@@ -5,10 +5,13 @@ module sat.stats;
  */
 
 import std.stdio;
-import std.datetime : Clock, StopWatch;
+import core.time;
+import std.datetime : StopWatch;
 import std.algorithm;
 
-StopWatch swTarjan, swSubsume, swSubsumeBinary, swXor, swSolver, swVarElim, swCleanup, swSolverStartup;
+StopWatch swTarjan, swCleanup;
+StopWatch swSubsume, swSubsumeBin, swXor;
+StopWatch swSolver, swSolverInit;
 
 long nLearnt;
 long nLitsOtfRemoved;
@@ -41,6 +44,13 @@ struct config
 	bool watchStats = false;
 }
 
+MonoTime startTime;
+
+static this()
+{
+	startTime = MonoTime.currTime;
+}
+
 void writeStats()
 {
 	if(config.watchStats)
@@ -60,17 +70,24 @@ void writeStats()
 	writefln("c lazy hyperBins: %#10s", nHyperBinary);
 	writefln("c trans binary:   %#10s", nBinaryReduction);
 
+	auto timeTarjan = swTarjan.peek.msecs/1000.0f;
+	auto timeXor = swXor.peek.msecs/1000.0f;
+	auto timeSubsume = swSubsume.peek.msecs/1000.0f;
+	auto timeSubsumeBin = swSubsumeBin.peek.msecs/1000.0f;
+	auto timeCleanup = swCleanup.peek.msecs/1000.0f;
+	auto timeSolverInit = swSolverInit.peek.msecs/1000.0f;
+	auto timeSolver = swSolver.peek.msecs/1000.0f;
+	auto timeTotal = (MonoTime.currTime - startTime).total!"msecs"/1000.0f;
+
 	writefln("c ============================ time stats =============================");
-	auto total = Clock.currAppTick;
-	writefln("c tarjan     %#6.2f s (%#4.1f %%)", swTarjan.peek.msecs/1000.0f, 100f*swTarjan.peek.msecs/total.msecs);
-	writefln("c xor        %#6.2f s (%#4.1f %%)", swXor.peek.msecs/1000.0f, 100f*swXor.peek.msecs/total.msecs);
-	writefln("c subsume    %#6.2f s (%#4.1f %%)", swSubsume.peek.msecs/1000.0f, 100f*swSubsume.peek.msecs/total.msecs);
-	writefln("c subsumeBin %#6.2f s (%#4.1f %%)", swSubsumeBinary.peek.msecs/1000.0f, 100f*swSubsumeBinary.peek.msecs/total.msecs);
-	writefln("c varElim    %#6.2f s (%#4.1f %%)", swVarElim.peek.msecs/1000.0f, 100f*swVarElim.peek.msecs/total.msecs);
-	writefln("c cleanup    %#6.2f s (%#4.1f %%)", swCleanup.peek.msecs/1000.0f, 100f*swCleanup.peek.msecs/total.msecs);
-	writefln("c solverInit %#6.2f s (%#4.1f %%)", swSolverStartup.peek.msecs/1000.0f, 100f*swSolverStartup.peek.msecs/total.msecs);
-	writefln("c solver     %#6.2f s (%#4.1f %%)", swSolver.peek.msecs/1000.0f, 100f*swSolver.peek.msecs/total.msecs);
-	writefln("c total      %#6.2f s", total.msecs/1000.0f);
+	writefln("c tarjan     %#6.2f s (%#4.1f %%)", timeTarjan, 100f*timeTarjan/timeTotal);
+	writefln("c cleanup    %#6.2f s (%#4.1f %%)", timeCleanup, 100f*timeCleanup/timeTotal);
+	writefln("c xor        %#6.2f s (%#4.1f %%)", timeXor, 100f*timeXor/timeTotal);
+	writefln("c subsume    %#6.2f s (%#4.1f %%)", timeSubsume, 100f*timeSubsume/timeTotal);
+	writefln("c subsumeBin %#6.2f s (%#4.1f %%)", timeSubsumeBin, 100f*timeSubsumeBin/timeTotal);
+	writefln("c solverInit %#6.2f s (%#4.1f %%)", timeSolverInit, 100f*timeSolverInit/timeTotal);
+	writefln("c solver     %#6.2f s (%#4.1f %%)", timeSolver, 100f*timeSolver/timeTotal);
+	writefln("c total      %#6.2f s", timeTotal);
 }
 
 struct Histogram

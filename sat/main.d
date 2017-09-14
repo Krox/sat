@@ -2,7 +2,7 @@ module sat.main;
 
 import std.stdio;
 import std.getopt : getopt, defaultGetoptPrinter;
-import std.datetime : Clock;
+import core.time;
 
 import sat.sat, sat.parser, sat.solver;
 
@@ -33,7 +33,7 @@ int main(string[] args)
 	writefln("c cnf file: %s", args[1]);
 
 	auto sat = readDimacs(args[1]);
-	writefln("c read in %.2f s", Clock.currAppTick.msecs/1000.0f);
+	writefln("c read in %.2f s", (MonoTime.currTime - startTime).total!"msecs"*1.0e-3);
 
 	auto sol = solve(sat);
 
