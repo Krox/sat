@@ -1,10 +1,14 @@
 module sat.solver;
 
-private import std.stdio;
+import core.bitop : bsr, popcnt;
+import std.stdio;
 
-private import sat.sat, sat.searcher, sat.twosat, sat.simplify, sat.xor;
-
-private import core.bitop: bsr, popcnt;
+import sat.sat;
+import sat.searcher;
+import sat.twosat;
+import sat.simplify;
+import sat.xor;
+import sat.prober;
 
 /** luby sequence, used as restart strategy */
 private int luby(int i)
@@ -21,11 +25,11 @@ private int luby(int i)
  */
 Solution solve(Sat sat)
 {
-	Solution sol;
-	long lastCleanup = 0;
-	// this is cheap, so just run it before starting up anything sophisticated
+	writefln("c starting solver with %s vars", sat.varCount);
 	new TwoSat(sat).run();
+	new Prober(sat).run();
 	sat.cleanup();
+	writefln("c after initial cleanup, %s vars remain", sat.varCount);
 
 	if(config.xor)
 	{
@@ -34,11 +38,12 @@ Solution solve(Sat sat)
 	}
 
 	sat.writeStatsHeader();
-
 	scope(exit)
 		sat.writeStatsFooter();
 
 	Searcher searcher = null;
+	Solution sol;
+	long lastCleanup = 0;
 	for(int i = 1; ; ++i)
 	{
 		if(searcher is null)
@@ -61,6 +66,7 @@ Solution solve(Sat sat)
 			// implement units, replace equivalent literals and renumber everything
 			sat.cleanup;
 			new TwoSat(sat).run();
+			new Prober(sat).run();
 			sat.cleanup;
 
 			if(config.xor)

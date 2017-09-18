@@ -29,7 +29,7 @@ class simplify
 	{
 		swSubsumeBin.start();
 
-		seen = BitArray(sat.varCount*2); // TODO: decide between lazy/normal
+		seen = BitArray(sat.varCount*2);
 
 		occs.resize(0);
 		occs.resize(sat.varCount*2);
