@@ -61,6 +61,11 @@ final class Sat
 			varData[i].label = Lit(i, false);
 	}
 
+	size_t memUsage() const @property
+	{
+		return varData.memUsage + units.memUsage + bins.memUsage + clauses.memUsage;
+	}
+
 	int varCount() const @property
 	{
 		return cast(int)varData.length;
@@ -622,8 +627,8 @@ final class Sat
 			nBin += bins[Lit(i,true)].length;
 		}
 
-		writefln("c ║ %#9s │ %#8s │ %#8s │ %#8s %#5.1f │ %#8s %#5.1f ║", nConflicts, varCount,
-		         nBin, histIrred.count, histIrred.avg, histLearnt.count, histLearnt.avg);
+		writefln("c ║ %#9s │ %#8s │ %#8s │ %#8s %#5.1f │ %#8s %#5.1f ║ %.2f MiB", nConflicts, varCount,
+		         nBin, histIrred.count, histIrred.avg, histLearnt.count, histLearnt.avg, memUsage/1024.0f/1024.0f);
 	}
 
 	void writeStatsFooter()

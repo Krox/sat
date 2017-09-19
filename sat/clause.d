@@ -1,5 +1,6 @@
 module sat.clause;
 
+import core.stdc.string : memmove;
 import std.algorithm : swap, map, sort;
 import std.array : join;
 import jive.array;
@@ -237,6 +238,26 @@ final class ClauseStorage
 				if((r = dg(this[i])) != 0)
 					return r;
 		return 0;
+	}
+
+	size_t memUsage() const @property
+	{
+		return store.memUsage + clauses.memUsage;
+	}
+
+	void compactify()
+	{
+		CRef j = CRef(0);
+		foreach(ref i, ref bool rem; clauses.prune)
+			if(this[i].removed)
+				rem = true;
+			else
+			{
+				memmove(&this[j], &this[i], uint.sizeof*(1+this[i].length));
+				i = j;
+				j.toInt += 1+this[i].length;
+			}
+		store.resize(j.toInt);
 	}
 
 	Histogram histogram(bool learnt)

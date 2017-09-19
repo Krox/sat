@@ -37,6 +37,7 @@ Solution solve(Sat sat)
 		sat.cleanup;
 		sat.runTwoSat;
 		sat.cleanup;
+		sat.clauses.compactify;
 		writefln("c after full probing: %s vars", sat.varCount);
 	}
 
@@ -99,6 +100,7 @@ Solution solve(Sat sat)
 
 			// remove some learnt clauses
 			sat.clean(nConflicts/3);
+			sat.clauses.compactify;
 		}
 	}
 
