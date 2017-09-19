@@ -25,11 +25,20 @@ private int luby(int i)
  */
 Solution solve(Sat sat)
 {
-	writefln("c starting solver with %s vars", sat.varCount);
-	new TwoSat(sat).run();
-	new Prober(sat).run();
-	sat.cleanup();
-	writefln("c after initial cleanup, %s vars remain", sat.varCount);
+	sat.runTwoSat;
+	sat.cleanup;
+	sat.runUnitPropagation;
+	sat.cleanup;
+	writefln("c after basic cleanup: %s vars", sat.varCount);
+
+	if(config.probing >= 1)
+	{
+		sat.runProber;
+		sat.cleanup;
+		sat.runTwoSat;
+		sat.cleanup;
+		writefln("c after full probing: %s vars", sat.varCount);
+	}
 
 	if(config.xor)
 	{
@@ -64,11 +73,17 @@ Solution solve(Sat sat)
 			delete searcher;
 
 			// implement units, replace equivalent literals and renumber everything
-			sat.cleanup;
-			new TwoSat(sat).run();
-			new Prober(sat).run();
+			sat.runTwoSat;
 			sat.cleanup;
 
+			// failed literal probing
+			if(config.probing >= 2)
+			{
+				sat.runProber;
+				sat.cleanup;
+			}
+
+			// gaussian elimination
 			if(config.xor)
 			{
 				solveXor(sat);

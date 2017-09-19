@@ -79,7 +79,7 @@ final class Prober
 	private BitArray seen;
 	private const(Lit)[] conflict;
 
-	this(Sat sat)
+	private this(Sat sat)
 	{
 		swProber.start();
 		scope(exit)
@@ -146,15 +146,14 @@ final class Prober
 	 */
 	private bool propagateBinary(Lit root, Reason reason)
 	{
-		static Array!Lit todo;
 		assert(!assign[root] && !assign[root.neg]);
-		set(root, reason);
-		todo.clear();
-		todo.pushBack(root);
 
-		while(!todo.empty)
+		auto pos = stack.length();
+		set(root, reason);
+
+		while(pos != stack.length)
 		{
-			auto x = todo.popBack;
+			auto x = stack[pos++];
 
 			// propagate binary clauses
 			foreach(Lit y; sat.bins[x.neg])
@@ -175,7 +174,6 @@ final class Prober
 
 				// not set at all -> propagate
 				set(y, Reason(x.neg));
-				todo.pushBack(y);
 			}
 		}
 
@@ -303,7 +301,7 @@ final class Prober
 	 * Run failed-literal probing.
 	 * This can add empty/unit/binary clauses to the Sat instance
 	 */
-	void run()
+	private void run()
 	{
 		swProber.start();
 		scope(exit)
@@ -353,7 +351,22 @@ final class Prober
 					reason[l.var] = Reason.unit;
 			}
 		}
-
-		sat.units = stack;
 	}
+}
+
+/** do unit propagation only */
+void runUnitPropagation(Sat sat)
+{
+	auto p = new Prober(sat);
+	sat.units = p.stack.move;
+	delete p;
+}
+
+/** do full failed literal probing */
+void runProber(Sat sat)
+{
+	auto p = new Prober(sat);
+	p.run;
+	sat.units = p.stack.move;
+	delete p;
 }

@@ -42,6 +42,7 @@ struct config
 	int otf = 2;
 	bool hyperBinary = true;
 	bool xor = true;
+	int probing = 2;
 
 	// statistic output
 	bool watchStats = false;

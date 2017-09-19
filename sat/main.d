@@ -18,6 +18,7 @@ int main(string[] args)
 	bool doCheck = false;
 
 	auto helpInfo = getopt(args,
+		"probing", "Failed literal probing. (0=none, 1=preprocessing, 2=inprocessing)", &config.probing,
 		"binary-subsume", "Binary self-subsuming resolution on top-level.", &config.binarySubsume,
 		"xor", "Gaussian elimination of xor clauses on top-level.", &config.xor,
 		"otf", "Simplification of learnt clauses. (0=none, 1=basic, 2=full)", &config.otf,

@@ -65,9 +65,6 @@ class TwoSat
 			return;
 		}
 
-		//if(comp.length > 1)
-		//	writefln("%s", comp[]);
-
 		foreach(l; comp[])
 		{
 			assert(equ[l.var] == Lit.undef);
@@ -77,37 +74,41 @@ class TwoSat
 		nComps++;
 	}
 
-	void run()
+	private this(Sat sat)
 	{
-		swTarjan.start();
-		scope(exit)
-			swTarjan.stop();
-
-		// initialize / resize datastructures
-		cnt = 0;
-		nComps = 0;
-		assert(stack.empty);
+		this.sat = sat;
 		back.assign(sat.varCount*2, 0);
 		visited.assign(sat.varCount*2, false);
 		equ.assign(sat.varCount, Lit.undef);
-
-		// run tarjan
-		for(int i = 0; i < sat.varCount*2; ++i)
-			dfs(Lit(i));
-
-		// no equivalences -> quit
-		if(nComps == sat.varCount)
-			return;
-
-		// contradiction found -> don't bother to renumber (also equ[] is not fully built)
-		if(sat.contradiction)
-			return;
-
-		sat.renumber(equ[], nComps, true);
 	}
+}
 
-	this(Sat sat)
-	{
-		this.sat = sat;
-	}
+/** returns true if something was found, false if not (sat is unchanged in that case) */
+bool runTwoSat(Sat sat)
+{
+	swTarjan.start();
+	scope(exit)
+		swTarjan.stop();
+
+	if(sat.contradiction)
+		return false;
+
+	auto tarjan = new TwoSat(sat);
+	scope(exit)
+		delete tarjan;
+
+	// run tarjan
+	for(int i = 0; i < sat.varCount*2 && !sat.contradiction; ++i)
+		tarjan.dfs(Lit(i));
+
+	// contradiction found -> don't bother to renumber (also equ[] is not fully built)
+	if(sat.contradiction)
+		return true;
+
+	// no equivalences -> quit
+	if(tarjan.nComps == sat.varCount)
+		return false;
+
+	sat.renumber(tarjan.equ[], tarjan.nComps, true);
+	return true;
 }
