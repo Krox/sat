@@ -40,7 +40,7 @@ struct config
 	// features of the solver
 	bool binarySubsume = true;
 	int otf = 2;
-	bool hyperBinary = true;
+	bool lhbr = true;
 	bool xor = true;
 	int probing = 2;
 

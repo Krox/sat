@@ -22,7 +22,7 @@ int main(string[] args)
 		"binary-subsume", "Binary self-subsuming resolution on top-level.", &config.binarySubsume,
 		"xor", "Gaussian elimination of xor clauses on top-level.", &config.xor,
 		"otf", "Simplification of learnt clauses. (0=none, 1=basic, 2=full)", &config.otf,
-		"hyperBinary", "Lazy hyper-binary resolution.", &config.hyperBinary,
+		"lhbr", "Lazy hyper-binary resolution.", &config.lhbr,
 		"watch-stats", "Keep and print statistics on watch-lists lengths.", &config.watchStats,
 		"c", "don't solve, just check solution", &doCheck,
 		);

@@ -58,22 +58,6 @@ struct Reason
 	}
 }
 
-private struct ActivityComp
-{
-	Sat sat;
-
-	this(Sat sat)
-	{
-		this.sat = sat;
-	}
-
-	bool opCall(int a, int b)
-	{
-		return sat.varData[a].activity > sat.varData[b].activity;
-	}
-}
-
-/** NOTE: only one instance should exist at any time as global data is used to save allocation time */
 final class Searcher
 {
 	Sat sat;
@@ -88,13 +72,13 @@ final class Searcher
 	}
 
 	// NOTE: these are static just to save some allocation time
-	static Array!VarData varData;
-	static Array!(Array!CRef) watches; // watches into long clauses
+	Array!VarData varData;
+	Array!(Array!CRef) watches; // watches into long clauses
 	Array!Lit stack; // trail of set variables
 	Array!int savePoint; // indices into stack
-	static PriorityArray!(double, "a > b") activityArray; // variables by activity for branch decision
+	PriorityArray!(double, "a > b") activityArray; // variables by activity for branch decision
 
-	static BitArray seen; // temporary multi-purpose, one bit per variable, reset right before use
+	BitArray seen; // temporary multi-purpose, one bit per variable, reset right before use
 
 	Lit[] conflict; // conflict encountered, only valid after propagate(...) returned false
 	private Lit[3] _conflict;
@@ -114,8 +98,8 @@ final class Searcher
 
 		this.sat = sat;
 
-		watches.assign(2*varCount, Array!CRef.init);
-		varData.assign(varCount, VarData.init);
+		watches.resize(2*varCount);
+		varData.resize(varCount);
 		seen.resize(varCount);
 		activityArray = PriorityArray!(double, "a > b")(varCount);
 
@@ -218,7 +202,7 @@ final class Searcher
 	private bool propagateBinary(Lit root, Reason reason)
 	{
 		size_t pos = stack.length;
-		set(root, reason, root);
+		set(root, reason, root.neg);
 
 		while(pos != stack.length)
 		{
@@ -231,7 +215,7 @@ final class Searcher
 				if(value(y.var) == lbool.undef)
 				{
 					nBinProps++;
-					set(y, Reason(x.neg), root);
+					set(y, Reason(x.neg), root.neg);
 				}
 
 				// set wrong -> conflict
@@ -300,17 +284,17 @@ final class Searcher
 				auto reason = Reason(i);
 
 				// try to replace long propagation by binary propagation
-				if(config.hyperBinary)
+				if(config.lhbr && currLevel > 0)
 				{
 					auto dom = dominator(c[1..$]);
 					if(dom != Lit.undef)
 					{
 						++nHyperBinary;
-						reason = addClause(c[0], dom.neg);
+						reason = addClause(c[0], dom);
 					}
 				}
 
-				if(!propagateBinary(c[0], Reason(i))) // clause is unit -> propagate it
+				if(!propagateBinary(c[0], reason)) // clause is unit -> propagate it
 					return false;
 			}
 		}
@@ -319,9 +303,9 @@ final class Searcher
 	}
 
 	/** common dominator of assigned literals. Lit.undef if there is none */
-	Lit dominator(Lit[] lits)
+	Lit dominator(const(Lit)[] lits)
 	{
-		assert(lits.length >= 2); // pointless to do otherwise
+		assert(lits.length >= 2 && currLevel > 0); // pointless to do otherwise
 
 		// check that a common dominator exists
 		Lit d = Lit.undef;
@@ -333,18 +317,20 @@ final class Searcher
 				else if(d != dom(x.var))
 					return Lit.undef;
 			}
-		return d;
-		/+ FIXME
+
 		seen.reset();
 		int count = 0;
 
-		foreach(l; lits[])
+		foreach(l; lits)
 		{
-			if(level(l.var) == 0 || seen[l.var])
+			assert(isSatisfied(l.neg));
+			assert(!seen[l.var]);
+			if(level(l.var) == 0)
 				continue;
 			++count;
 			seen[l.var] = true;
 		}
+		assert(count > 0);
 
 		foreach_reverse(x; stack[])
 		{
@@ -352,10 +338,7 @@ final class Searcher
 				continue;
 
 			if(--count == 0)
-			{
-				assert(dom(x.var) == d);
-				return x;
-			}
+				return x.neg;
 
 			assert(reason(x.var).type == Reason.binary);
 			auto y = reason(x.var).lit2;
@@ -363,13 +346,10 @@ final class Searcher
 				continue;
 
 			++count;
+			assert(dom(y.var) == d);
 			seen[y.var] = true;
 		}
 		assert(false);
-
-
-		return dom(lits[0].var);
-		+/
 	}
 
 	/**
