@@ -569,17 +569,21 @@ final class Sat
 
 		// unary clauses
 		foreach(a; units)
-			file.writefln("%s 0", a);
+			file.writefln("%s 0", a.toDimacs);
 
 		// binary clauses
 		for(int i = 0; i < varCount*2; ++i)
 			foreach(l; bins[Lit(i)])
 				if(i >= l)
-					file.writefln("%s %s 0", Lit(i), l);
+					file.writefln("%s %s 0", Lit(i).toDimacs, l.toDimacs);
 
 		// long clauses
 		foreach(ref c; clauses)
-			file.writefln("%s 0", c.toString);
+		{
+			foreach(l; c[])
+				file.writef("%s ", l.toDimacs);
+			file.writefln("0");
+		}
 	}
 
 	bool checkSolution(ref const BitArray sol)
@@ -608,14 +612,14 @@ final class Sat
 		return true;
 	}
 
-	void writeStatsHeader()
+	void writeStatsHeader() const
 	{
 		writefln("c ╔═══════════╤══════════╤══════════╤════════════════╤════════════════╗");
 		writefln("c ║ conflicts │   vars   │  binary  │     long   len │   learnt   len ║");
 		writefln("c ╟───────────┼──────────┼──────────┼────────────────┼────────────────╢");
 	}
 
-	void writeStatsLine()
+	void writeStatsLine() const
 	{
 		auto histIrred = clauses.histogram(false);
 		auto histLearnt = clauses.histogram(true);
@@ -626,12 +630,13 @@ final class Sat
 			nBin += bins[Lit(i,false)].length;
 			nBin += bins[Lit(i,true)].length;
 		}
+		nBin /= 2;
 
 		writefln("c ║ %#9s │ %#8s │ %#8s │ %#8s %#5.1f │ %#8s %#5.1f ║ %.2f MiB", nConflicts, varCount,
 		         nBin, histIrred.count, histIrred.avg, histLearnt.count, histLearnt.avg, memUsage/1024.0f/1024.0f);
 	}
 
-	void writeStatsFooter()
+	void writeStatsFooter() const
 	{
 		writefln("c ╚═══════════╧══════════╧══════════╧════════════════╧════════════════╝");
 	}

@@ -1,9 +1,11 @@
 module sat.types;
 
-private import std.conv : to;
+import std.format;
 
 struct lbool
 {
+	@nogc: nothrow: pure: @safe:
+
 	byte val = 2; // 0=false, 1=true, 2=undef
 
 	this(bool b)
@@ -57,53 +59,55 @@ static assert(lbool.init == lbool.undef);
 
 struct Lit
 {
+	@nogc: nothrow: pure: @safe:
+
 	uint toInt;
 	alias toInt this; // TODO: remove this to avoid int<->Lit confusion
 	static assert(Lit.sizeof == uint.sizeof);
 	// NOTE: don't use std.bitmanip:bitfields. The asserts it contains are more annoying than helpful
 
-	this(uint v, bool s) nothrow @safe
+	this(uint v, bool s)
 	{
 		toInt = (v<<1) | s;
 	}
 
-	this(uint i) nothrow @safe
+	this(uint i)
 	{
 		toInt = i;
 	}
 
-	uint var() const nothrow @property @safe
+	uint var() const @property
 	{
 		return toInt >> 1;
 	}
 
-	void var(uint v) nothrow @property @safe
+	void var(uint v) @property
 	{
 		toInt = (toInt & 1) | (v << 1);
 	}
 
-	bool sign() const nothrow @property @safe
+	bool sign() const @property
 	{
 		return toInt & 1;
 	}
 
-	void sign(bool s) nothrow @property @safe
+	void sign(bool s) @property
 	{
 		toInt = (toInt & ~1) | s;
 	}
 
-	Lit neg() const nothrow @property @safe
+	Lit neg() const @property
 	{
 		return Lit(toInt ^ 1);
 	}
 
-	Lit opBinary(string op)(bool r) const nothrow @safe
+	Lit opBinary(string op)(bool r) const
 		if(op == "^")
 	{
 		return Lit(toInt^r);
 	}
 
-	int toDimacs() const nothrow @property @safe
+	int toDimacs() const @property
 	{
 		if(sign)
 			return -(var+1);
@@ -111,19 +115,7 @@ struct Lit
 			return var+1;
 	}
 
-	string toString() const @property @safe
-	{
-		switch(this.toInt)
-		{
-			case undef: return "undef";
-			case elim: return "eliminated";
-			case one: return "true";
-			case zero: return "false";
-			default: return to!string(toDimacs);
-		}
-	}
-
-	static Lit fromDimacs(int x) nothrow @safe
+	static Lit fromDimacs(int x)
 	{
 		if(x > 0)
 			return Lit(x-1, false);
@@ -138,12 +130,12 @@ struct Lit
 	static assert(one.fixed);
 	static assert(zero.fixed);
 
-	bool fixed() const nothrow @property @safe
+	bool fixed() const @property
 	{
 		return (toInt&~1) == -4;
 	}
 
-	bool proper() const nothrow @property @safe
+	bool proper() const @property
 	{
 		return (toInt & (1U<<31)) == 0;
 	}

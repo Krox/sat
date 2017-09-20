@@ -10,6 +10,8 @@ import sat.types;
 
 struct Clause
 {
+	@nogc: nothrow: pure: @safe:
+
 	short length;
 	ubyte flags;
 	ubyte _reserved;
@@ -36,7 +38,7 @@ struct Clause
 		this.flags = irred;
 	}
 
-	inout(Lit)[] opSlice() inout
+	inout(Lit)[] opSlice() inout @trusted
 	{
 		return (cast(inout(Lit)*)&this)[1..length+1];
 	}
@@ -59,11 +61,6 @@ struct Clause
 			if(l.sign)
 				r |= 1U << i;
 		return r;
-	}
-
-	string toString() const @property
-	{
-		return join(map!"a.toString"(this[]), " ");
 	}
 
 	bool opIn_r(Lit l) const
@@ -173,10 +170,10 @@ final class ClauseStorage
 		clauses = c.clauses;
 	}
 
-	ref Clause opIndex(CRef r)
+	ref inout(Clause) opIndex(CRef r) inout
 	{
-		void* ptr = &store[r.toInt];
-		return *cast(Clause*)ptr;
+		inout(void)* ptr = &store[r.toInt];
+		return *cast(inout(Clause)*)ptr;
 	}
 
 	CRef addClause(const Lit[] lits, bool irred)
@@ -200,7 +197,7 @@ final class ClauseStorage
 		return r;
 	}
 
-	int opApply(int delegate(CRef, ref Clause) dg)
+	int opApply(scope int delegate(CRef, ref Clause) dg)
 	{
 		int r;
 		foreach(i; clauses)
@@ -210,7 +207,7 @@ final class ClauseStorage
 		return 0;
 	}
 
-	int opApply(int delegate(ref Clause) dg)
+	int opApply(scope int delegate(ref Clause) dg)
 	{
 		int r;
 		foreach(i; clauses)
@@ -220,7 +217,7 @@ final class ClauseStorage
 		return 0;
 	}
 
-	int opApplyReverse(int delegate(CRef, ref Clause) dg)
+	int opApplyReverse(scope int delegate(CRef, ref Clause) dg)
 	{
 		int r;
 		foreach_reverse(i; clauses)
@@ -230,7 +227,7 @@ final class ClauseStorage
 		return 0;
 	}
 
-	int opApplyReverse(int delegate(ref Clause) dg)
+	int opApplyReverse(scope int delegate(ref Clause) dg)
 	{
 		int r;
 		foreach_reverse(i; clauses)
@@ -260,12 +257,12 @@ final class ClauseStorage
 		store.resize(j.toInt);
 	}
 
-	Histogram histogram(bool learnt)
+	Histogram histogram(bool learnt) const
 	{
 		Histogram h;
-		foreach(ref c; this)
-			if(c.irred != learnt)
-				h.add(c.length);
+		foreach(i; clauses[])
+			if(!this[i].removed && this[i].irred != learnt)
+				h.add(this[i].length);
 		return h;
 	}
 }
