@@ -75,7 +75,7 @@ final class Solution
 		{
 			if(!assign[i].fixed)
 				throw new Exception("tried to output an incomplete assignment");
-			file.writef(i==0?"%s":" %s", Lit(i, assign[i].sign));
+			file.writef(i==0?"%s":" %s", Lit(i, assign[i].sign).toDimacs);
 		}
 		file.writefln(" 0");
 	}
