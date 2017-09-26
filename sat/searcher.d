@@ -7,10 +7,12 @@ module sat.searcher;
 import std.stdio;
 import std.datetime : Clock;
 import std.algorithm : move, swap;
+import std.typecons : tuple, Tuple;
 
 import jive.array;
 import jive.bitarray;
 import jive.priorityarray;
+import jive.priorityqueue;
 
 import sat.sat;
 
@@ -67,6 +69,7 @@ final class Searcher
 	{
 		lbool value = lbool.undef;
 		int level; // only valid for assigned variables
+		int pos; // position into trail
 		Reason reason = Reason.undef; // ditto
 		Lit dom = Lit.undef; // ditto
 	}
@@ -87,6 +90,7 @@ final class Searcher
 	ref Reason reason(int i) { return varData[i].reason; }
 	ref Lit dom(int i) { return varData[i].dom; }
 	ref int level(int i) { return varData[i].level; }
+	ref int pos(int i) { return varData[i].pos; }
 	bool isSatisfied(Lit l) const { return varData[l.var].value == lbool(!l.sign); }
 	int currLevel() const @property { return cast(int) savePoint.length; }
 
@@ -193,6 +197,7 @@ final class Searcher
 		value(x.var) = lbool(!x.sign);
 		stack.pushBack(x);
 		level(x.var) = currLevel;
+		pos(x.var) = cast(int)stack.length-1;
 		reason(x.var) = r;
 		dom(x.var) = d;
 		sat.varData[x.var].polarity = x.sign;
@@ -318,36 +323,32 @@ final class Searcher
 					return Lit.undef;
 			}
 
-		seen.reset();
-		int count = 0;
+		static PriorityQueue!(Tuple!(int,Lit), "a[0] > b[0]") q;
+		assert(q.empty);
 
 		foreach(l; lits)
 		{
 			assert(isSatisfied(l.neg));
-			assert(!seen[l.var]);
 			if(level(l.var) == 0)
 				continue;
-			++count;
-			seen[l.var] = true;
+			q.push(tuple(pos(l.var),cast()l));
 		}
-		assert(count > 0);
+		assert(!q.empty);
 
-		foreach_reverse(x; stack[])
+		while(!q.empty)
 		{
-			if(!seen[x.var])
+			auto x = q.pop;
+			while(!q.empty && q.front[0] == x[0])
+				q.pop;
+			if(q.empty)
+				return x[1];
+
+			assert(reason(x[1].var).type == Reason.binary);
+			auto y = reason(x[1].var).lit2;
+			if(level(y.var) == 0)
 				continue;
-
-			if(--count == 0)
-				return x.neg;
-
-			assert(reason(x.var).type == Reason.binary);
-			auto y = reason(x.var).lit2;
-			if(level(y.var) == 0 || seen[y.var])
-				continue;
-
-			++count;
 			assert(dom(y.var) == d);
-			seen[y.var] = true;
+			q.push(tuple(pos(y.var), y));
 		}
 		assert(false);
 	}
