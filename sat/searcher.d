@@ -11,10 +11,10 @@ import std.typecons : tuple, Tuple;
 
 import jive.array;
 import jive.bitarray;
-import jive.priorityarray;
 import jive.priorityqueue;
 
 import sat.sat;
+import sat.activityheap;
 
 struct Reason
 {
@@ -79,7 +79,7 @@ final class Searcher
 	Array!(Array!CRef) watches; // watches into long clauses
 	Array!Lit stack; // trail of set variables
 	Array!int savePoint; // indices into stack
-	PriorityArray!(double, "a > b") activityArray; // variables by activity for branch decision
+	ActivityHeap activityHeap; // variables by activity for branch decision
 
 	BitArray seen; // temporary multi-purpose, one bit per variable, reset right before use
 
@@ -105,7 +105,7 @@ final class Searcher
 		watches.resize(2*varCount);
 		varData.resize(varCount);
 		seen.resize(varCount);
-		activityArray = PriorityArray!(double, "a > b")(varCount);
+		activityHeap = ActivityHeap(sat);
 
 		foreach(i, ref c; sat.clauses)
 		{
@@ -130,9 +130,7 @@ final class Searcher
 		// add non-fixed variables to activity heap
 		for(int i = 0; i < varCount; ++i)
 			if(value(i) == lbool.undef)
-				activityArray[i] = sat.varData[i].activity;
-			else
-				activityArray[i] = -1;
+				activityHeap.push(i);
 	}
 
 	/**
@@ -185,7 +183,7 @@ final class Searcher
 		{
 			Lit lit = stack.popBack;
 			value(lit.var) = lbool.undef;
-			activityArray[lit.var] = sat.varData[lit.var].activity;
+			activityHeap.push(lit.var);
 		}
 		savePoint.resize(l);
 	}
@@ -376,8 +374,7 @@ final class Searcher
 			seen[lit.var] = true;
 
 			sat.bumpVariableActivity(lit.var);
-			if(activityArray[lit.var] != -1)
-				activityArray[lit.var] = sat.varData[lit.var].activity;
+			activityHeap.update(lit.var);
 
 			if(level(lit.var) < currLevel) // reason side
 				buf.pushBack(lit);
@@ -493,19 +490,15 @@ final class Searcher
 		if(sat.varCount == 0)
 			return -1;
 
-		while(activityArray.min != -1)
+		while(!activityHeap.empty)
 		{
-			int v = cast(int)activityArray.minIndex;
+			int v = activityHeap.pop;
 			if(varData[v].value != lbool.undef)
-			{
-				activityArray[v] = -1;
 				continue;
-			}
 
 			// check the heap (very expensive, debug only)
 			//for(int i = 0; i < varCount; ++i)
 			//	assert(assign[Lit(i,false)] || assign[Lit(i,true)] || activity[i] <= activity[v]);
-
 			return v;
 		}
 
