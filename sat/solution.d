@@ -70,12 +70,13 @@ final class Solution
 
 	void print(File file) const
 	{
-		file.writefln("SAT");
+		file.writefln("s SATISFIABLE");
+		file.writef("v");
 		for(int i = 0; i < varCount; ++i)
 		{
 			if(!assign[i].fixed)
 				throw new Exception("tried to output an incomplete assignment");
-			file.writef(i==0?"%s":" %s", Lit(i, assign[i].sign).toDimacs);
+			file.writef(" %s", Lit(i, assign[i].sign).toDimacs);
 		}
 		file.writefln(" 0");
 	}
