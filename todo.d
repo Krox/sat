@@ -2,7 +2,7 @@
 
 import std.process;
 import std.stdio;
-import std.algorithm : splitter, sort, map;
+import std.algorithm : splitter, sort, map, canFind;
 import std.string : strip, format;
 import std.array : join;
 import std.getopt;
@@ -14,7 +14,7 @@ import std.file : readText, isDir, write;
 int main(string[] args)
 {
 	string solver = "bin/sat";
-	string cnfFolder = "./sat-2002-beta/submitted";
+	string cnfFolder = null;
 	int timeout = 1;
 	bool nocheck = false;
 	string timingFilename;
@@ -34,11 +34,20 @@ int main(string[] args)
 	}
 
 	string[] filenames;
-	bool readDir = isDir(cnfFolder);
-	if(readDir)
-		filenames = array(splitter(executeShell("find "~cnfFolder~" -type f").output, "\n"));
+
+	// case 1 (default): all dub-directories
+	if(cnfFolder is null)
+		filenames = array(splitter(executeShell("find . -mindepth 2 -type f -name \"*.cnf\"").output, "\n"));
+
+	// case 2: a specific directory
+	else if(isDir(cnfFolder))
+		filenames = array(splitter(executeShell("find "~cnfFolder~" -type f -name \"*.cnf\"").output, "\n"));
+
+	// case 3: a single cnf file
 	else if(cnfFolder[$-4..$] == ".cnf")
 		filenames = [cnfFolder];
+
+	// case 4: a file with a list of filenames
 	else
 		filenames = cnfFolder.readText.splitter("\n").map!"a.find(\" \")".array;
 
@@ -52,16 +61,26 @@ int main(string[] args)
 			continue;
 
 		writefln("[%s / %s] %s", i, filenames.length, file);
+
+
+		string cmd;
+		if(solver.canFind("lingeling"))
+			cmd = format("%s %s -o solutionTmp", solver, file);
+		else if(solver.canFind("cryptominisat"))
+			cmd = format("%s %s > solutionTmp", solver, file);
+		else
+			cmd = format("%s %s solutionTmp", solver, file);
+
 		StopWatch sw;
 		sw.start;
-		auto r = executeShell("timeout "~to!string(timeout)~"s /usr/bin/time -f \"%U\" -o timeTmp "~solver~" "~file~" solutionTmp");
+		auto r = executeShell(format("timeout %ss %s", timeout, cmd));
 		sw.stop;
 
 		switch(r.status)
 		{
 			case 10:
 				writef("\tsolution found... ");
-				auto s = executeShell("./check.d "~file~" solutionTmp");
+				auto s = executeShell("bin/sat -c "~file~" solutionTmp");
 				if(s.status == 0)
 					writefln("checked");
 				else
@@ -99,10 +118,10 @@ int main(string[] args)
 				return -1;
 		}
 
-		timing ~= format("%s %s", sw.peek.msecs/1000.0, file);
+		timing ~= format("%.2f %s", sw.peek.msecs/1000.0, file);
 	}
 
-	if(readDir)
+	if(filenames.length > 1)
 		sort(timing);
 	if(timingFilename is null)
 		timingFilename = executeShell("date +%F_%R.timing").output.strip;
