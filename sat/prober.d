@@ -314,6 +314,9 @@ final class Prober
 		auto done = BitArray(2*sat.varCount);
 		foreach(x; top.verts[])
 		{
+			if(interrupted)
+				break;
+
 			auto lit = Lit(x);
 
 			// skip assigned variables and marked literals

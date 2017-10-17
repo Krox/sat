@@ -143,3 +143,19 @@ struct Histogram
 		writefln("c avg = %s", avg);
 	}
 }
+
+shared bool _interrupted = false;
+
+bool interrupted()
+{
+	import core.atomic;
+	return atomicLoad(_interrupted);
+}
+
+extern(C) void interruptHandler(int sig) @nogc nothrow
+{
+	import core.stdc.signal;
+	import core.atomic;
+	atomicStore(_interrupted, true);
+	signal(SIGINT, SIG_DFL); // remove the handler so that a second SIGINT will abort the program
+}

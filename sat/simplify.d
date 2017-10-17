@@ -38,7 +38,11 @@ class simplify
 				occs[x].pushBack(k);
 
 		for(int i = 0; i < sat.varCount*2; ++i)
+		{
+			if(interrupted)
+				break;
 			binarySubsume(Lit(i));
+		}
 
 		swSubsumeBin.stop();
 	}

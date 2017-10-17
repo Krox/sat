@@ -63,6 +63,9 @@ Solution solve(Sat sat)
 		sat.writeStatsLine();
 		bool solved = searcher.run(luby(i)*100, sol);
 
+		if(interrupted)
+			break;
+
 		if(solved)
 			break;
 
@@ -104,7 +107,7 @@ Solution solve(Sat sat)
 		}
 	}
 
-	if(sat.contradiction)
+	if(interrupted || sat.contradiction)
 		return null;
 	else
 	{

@@ -3,6 +3,7 @@ module sat.main;
 import std.stdio;
 import std.getopt : getopt, defaultGetoptPrinter;
 import core.time;
+import core.stdc.signal;
 
 import sat.sat, sat.parser, sat.solver;
 
@@ -34,6 +35,8 @@ int main(string[] args)
 		return 0;
 	}
 
+	signal(SIGINT, &interruptHandler);
+
 	// if check was requested, do so and quit
 	if(doCheck)
 	{
@@ -62,32 +65,26 @@ int main(string[] args)
 
 	auto sol = solve(sat);
 
-	if(sol !is null)
+	if(sol !is null) // found a solution
 	{
-		// verdict
 		writefln("s SATISFIABLE");
-
-		// print solution to file
 		if(args.length >= 3)
 			sol.print(File(args[2], "w"));
-
-		// time statistics
 		writeStats();
-
 		return 10;
 	}
-	else
+	else if(!interrupted) // unsatisfiable
 	{
-		// verdict
 		writefln("s UNSATISFIABLE");
-
-		// print verdict to file
 		if(args.length >= 3)
-			File(args[2], "w").writefln("UNSAT");
-
-		// time statistics
+			File(args[2], "w").writefln("s UNSATISFIABLE");
 		writeStats();
-
 		return 20;
+	}
+	else // interrupted
+	{
+		writefln("c INTERRUPTED");
+		writeStats();
+		return 30;
 	}
 }

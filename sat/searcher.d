@@ -565,7 +565,7 @@ final class Searcher
 					break;
 			}
 
-			if(numConflicts <= 0)
+			if(numConflicts <= 0 || interrupted)
 			{
 				unrollLevel(0);
 				sat.units = stack;
