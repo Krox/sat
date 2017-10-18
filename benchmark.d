@@ -1,5 +1,7 @@
-#!/usr/bin/rdmd --shebang -O
-
+#!/usr/bin/env dub
+/+ dub.sdl:
+	name "benchmark"
++/
 import std.process;
 import std.stdio;
 import std.algorithm : splitter, sort, map, canFind;
